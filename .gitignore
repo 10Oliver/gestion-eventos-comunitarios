@@ -1,0 +1,19 @@
+# React Native general
+node_modules/
+.expo/
+.expo-shared/
+dist/
+build/
+android/.gradle/
+android/app/build/
+ios/build/
+ios/Pods/
+*.iml
+*.keystore
+*.jks
+
+# Archivos sensibles
+.env
+google-services.json
+GoogleService-Info.plist
+

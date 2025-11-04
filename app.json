@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Gestion Eventos Comunitarios",
+    "slug": "gestion-eventos-comunitarios",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "bundleIdentifier": "com.gestioneventoscomunitarios.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.gestioneventoscomunitarios.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "auth-example",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "224f491a-580f-47dc-9808-6b203dc58f70"
+      }
+    }
+  }
+}
