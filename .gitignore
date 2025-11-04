@@ -11,6 +11,7 @@ ios/Pods/
 *.iml
 *.keystore
 *.jks
+package-lock.json
 
 # Archivos sensibles
 .env
