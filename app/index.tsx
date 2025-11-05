@@ -1,26 +1,50 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
-import { makeRedirectUri } from 'expo-auth-session';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
-  const redirectUri = makeRedirectUri({ useProxy: true });
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    //androidClientId: '803821575234-t80td046s7p84alkpehmqrhk5slllh8d.apps.googleusercontent.com',
-    clientId: '803821575234-7p575a3he8j84cq6jd6odvgcv0c94hi2.apps.googleusercontent.com',
-    redirectUri,
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    androidClientId: '803821575234-t80td046s7p84alkpehmqrhk5slllh8d.apps.googleusercontent.com',
+  }, {
+    native: 'com.gestioneventoscomunitarios.app:/oauth2redirect/google',
   });
 
   React.useEffect(() => {
     if (response?.type === 'success') {
-      const { authentication } = response;
-      if (authentication) {
-        getUserInfo(authentication.accessToken);
+      const { id_token } = response.params;
+      if (id_token) {
+        const userInfo = parseJwt(id_token);
+        router.replace({
+          pathname: '/(tabs)/home',
+          params: {
+            email: userInfo.email || '',
+            name: userInfo.name || '',
+            picture: userInfo.picture || ''
+          }
+        });
       }
     }
   }, [response]);
+
+  const parseJwt = (token: string) => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch {
+      return {};
+    }
+  };
 
   const getUserInfo = async (token: string) => {
     try {
@@ -38,7 +62,9 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Login</Text>
-      <TouchableOpacity style={styles.googleButton} onPress={() => promptAsync().catch((err) => console.error(err))}>
+      <TouchableOpacity 
+        style={styles.googleButton} 
+        onPress={() => promptAsync()}>
         <Text style={styles.googleButtonText}>Sign in with Google</Text>
       </TouchableOpacity>
     </View>
