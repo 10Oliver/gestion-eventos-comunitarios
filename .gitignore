@@ -13,8 +13,17 @@ ios/Pods/
 *.jks
 package-lock.json
 
+# Android build artifacts
+android/build/
+android/captures/
+*.apk
+*.aab
+local.properties
+
 # Archivos sensibles
+package-lock.json
 .env
 google-services.json
 GoogleService-Info.plist
 
+android/
