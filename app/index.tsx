@@ -17,15 +17,30 @@ export default function LoginScreen() {
     if (response?.type === 'success') {
       const { id_token } = response.params;
       if (id_token) {
-        const userInfo = parseJwt(id_token);
-        router.replace({
-          pathname: '/(tabs)/home',
-          params: {
-            email: userInfo.email || '',
-            name: userInfo.name || '',
-            picture: userInfo.picture || ''
+        const userInfo = parseJwt(id_token) as any;
+        const userId = userInfo.sub || userInfo.email || '';
+        // Lazy import to avoid circular deps
+        (async () => {
+          const { upsertUser } = await import('../lib/models/users');
+          const { setCurrentUserId } = await import('../lib/db');
+          if (userId) {
+            await upsertUser({
+              id: userId,
+              name: userInfo.name,
+              email: userInfo.email,
+              photo_url: userInfo.picture,
+            });
+            await setCurrentUserId(userId);
           }
-        });
+          router.replace({
+            pathname: '/(tabs)/home',
+            params: {
+              email: userInfo.email || '',
+              name: userInfo.name || '',
+              picture: userInfo.picture || ''
+            }
+          });
+        })().catch(console.error);
       }
     }
   }, [response]);
