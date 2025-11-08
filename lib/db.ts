@@ -1,21 +1,13 @@
-import * as SQLite from 'expo-sqlite';
+import * as SQLite from 'expo-sqlite/legacy';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
-    // Use the async API when available (Expo SDK 50+)
-    // @ts-ignore - openDatabaseAsync exists on supported Expo SDKs
-    dbPromise = (SQLite as any).openDatabaseAsync
-      ? (SQLite as any).openDatabaseAsync('app.db')
-      : Promise.resolve(SQLite.openDatabase('app.db')) as unknown as Promise<SQLite.SQLiteDatabase>;
+    dbPromise = Promise.resolve(SQLite.openDatabase('app.db')) as unknown as Promise<SQLite.SQLiteDatabase>;
   }
   const db = await dbPromise;
-  try {
-    // Ensure foreign keys
-    // @ts-ignore
-    await (db as any).execAsync?.('PRAGMA foreign_keys = ON;');
-  } catch {}
+  // Foreign keys pragma not supported via runAsync path; ignore for classic API.
   return db;
 }
 
@@ -70,18 +62,11 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_date, start_time);
   `;
 
-  // Prefer async exec when present
-  // @ts-ignore
-  if ((db as any).execAsync) {
-    // @ts-ignore
-    await (db as any).execAsync(queries);
-  } else {
-    await new Promise<void>((resolve, reject) => {
-      db.transaction(tx => {
-        queries.split(';').map(q => q.trim()).filter(Boolean).forEach(q => tx.executeSql(q));
-      }, reject, resolve);
-    });
-  }
+  await new Promise<void>((resolve, reject) => {
+    db.transaction(tx => {
+      queries.split(';').map(q => q.trim()).filter(Boolean).forEach(q => tx.executeSql(q));
+    }, reject, resolve);
+  });
 
   // Seed categories if empty
   const countRes = await getSingle<{ c: number }>(`SELECT COUNT(1) as c FROM categories`);
@@ -121,8 +106,6 @@ export async function initializeDatabase() {
 
 export async function run(sql: string, params: any[] = []) {
   const db = await getDb();
-  // @ts-ignore
-  if ((db as any).runAsync) return (db as any).runAsync(sql, params);
   return new Promise<void>((resolve, reject) => {
     db.transaction(tx => {
       tx.executeSql(sql, params, () => resolve());
@@ -132,8 +115,6 @@ export async function run(sql: string, params: any[] = []) {
 
 export async function getAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
   const db = await getDb();
-  // @ts-ignore
-  if ((db as any).getAllAsync) return (db as any).getAllAsync(sql, params);
   return new Promise<T[]>((resolve, reject) => {
     db.readTransaction(tx => {
       tx.executeSql(sql, params, (_t, res) => {

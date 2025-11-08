@@ -1,16 +1,17 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
+import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
+  const redirectUri = makeRedirectUri({ scheme: 'com.gestioneventoscomunitarios.app', path: 'oauth2redirect/google', native: 'com.gestioneventoscomunitarios.app:/oauth2redirect/google' });
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     androidClientId: '803821575234-t80td046s7p84alkpehmqrhk5slllh8d.apps.googleusercontent.com',
-  }, {
-    native: 'com.gestioneventoscomunitarios.app:/oauth2redirect/google',
+    redirectUri,
   });
 
   React.useEffect(() => {
@@ -79,7 +80,7 @@ export default function LoginScreen() {
       <Text style={styles.title}>Login</Text>
       <TouchableOpacity 
         style={styles.googleButton} 
-        onPress={() => promptAsync()}>
+        onPress={() => promptAsync({ useProxy: false })}>
         <Text style={styles.googleButtonText}>Sign in with Google</Text>
       </TouchableOpacity>
     </View>
