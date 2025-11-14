@@ -20,7 +20,7 @@ export default function LoginScreen() {
       if (id_token) {
         const userInfo = parseJwt(id_token) as any;
         const userId = userInfo.sub || userInfo.email || '';
-        // Lazy import to avoid circular deps
+       
         (async () => {
           const { upsertUser } = await import('../lib/models/users');
           const { setCurrentUserId } = await import('../lib/db');
@@ -80,7 +80,7 @@ export default function LoginScreen() {
       <Text style={styles.title}>Login</Text>
       <TouchableOpacity 
         style={styles.googleButton} 
-        onPress={() => promptAsync({ useProxy: false })}>
+        onPress={() => promptAsync({})}>
         <Text style={styles.googleButtonText}>Sign in with Google</Text>
       </TouchableOpacity>
     </View>
