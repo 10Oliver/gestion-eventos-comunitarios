@@ -1,47 +1,32 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  ActivityIndicator,
   Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
 
 import {
   getEventsCreatedByUser,
   getEventsUserWillAttend,
+  type EventWithMeta,
 } from "../../lib/models/events";
 
-type EventItem = {
-  id: number;
-  name: string;
-  place: string;
-  start_date: string;
-  start_time: string;
-  category_name?: string;
-  attendees_count?: number;
-};
-
 export default function ProfileScreen() {
-  const params = useLocalSearchParams<{ name?: string; email?: string }>();
 
-  const displayName = params.name || "Usuario";
-  const [email, setEmail] = useState(params.email || "correo@ejemplo.com");
-  const [community, setCommunity] = useState("Comunidad Las Brisas");
-  const [aboutMe, setAboutMe] = useState(
-    "Aquí va la descripción del usuario."
-  );
-
+  const [email, setEmail] = useState("porejemplo@abc.com");
+  const [community, setCommunity] = useState("Comunidad Prusia");
+  const [aboutMe, setAboutMe] = useState("Ejemplo de información");
   const [isEditing, setIsEditing] = useState(false);
 
-  const [createdEvents, setCreatedEvents] = useState<EventItem[]>([]);
-  const [attendingEvents, setAttendingEvents] = useState<EventItem[]>([]);
-  const [selectedTab, setSelectedTab] =
-    useState<"created" | "attending">("created");
+  const [createdEvents, setCreatedEvents] = useState<EventWithMeta[]>([]);
+  const [attendingEvents, setAttendingEvents] = useState<EventWithMeta[]>([]);
+  const [selectedTab, setSelectedTab] = useState<"created" | "attending">(
+    "created"
+  );
 
   const [loading, setLoading] = useState(true);
 
@@ -71,101 +56,95 @@ export default function ProfileScreen() {
     loadData();
   }, [userId]);
 
-  function formatDateLabel(iso: string) {
-    try {
-      const [y, m, d] = iso.split("-");
-      const date = new Date(Number(y), Number(m) - 1, Number(d));
-      const day = String(date.getDate()).padStart(2, "0");
-      const monthStr = date
-        .toLocaleDateString("es-ES", { month: "short" })
-        .toUpperCase();
-      return { day, monthStr };
-    } catch {
-      return { day: "??", monthStr: "??" };
-    }
-  }
+  const formatDateTime = (e: EventWithMeta) => {
+    const date = e.start_date ?? "";
+    const [year, month, day] = date.split("-");
+    const dateLabel =
+      day && month ? `${day}/${month}` : e.start_date ?? "Sin fecha";
 
-  const currentEvents =
+    const timeLabel =
+      e.start_time && e.end_time
+        ? `${e.start_time} – ${e.end_time}`
+        : e.start_time ?? "";
+
+    return { dateLabel, timeLabel };
+  };
+
+  const currentList =
     selectedTab === "created" ? createdEvents : attendingEvents;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       {/* HEADER */}
       <View style={styles.headerRow}>
-        <View style={styles.menuIcon}>
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() =>
+            Alert.alert("Menú", "Aquí podrías abrir un menú lateral.")
+          }
+        >
           <View style={styles.menuLine} />
           <View style={styles.menuLine} />
           <View style={styles.menuLine} />
-        </View>
-        <Text style={styles.headerTitle}>Mi Perfil</Text>
+        </TouchableOpacity>
+
+      <Text style={styles.headerTitle}>Mi Perfil</Text>
       </View>
 
-      {/* NOMBRE */}
-      <View style={styles.nameRow}>
-        <Text style={styles.nameText}>{displayName.toUpperCase()}</Text>
+      {/* USUARIO */}
+      <Text style={styles.sectionLabel}>USUARIO</Text>
+
+      <View style={styles.userCard}>
+        {/* Avatar */}
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarText}>
+            {email[0]?.toUpperCase() ?? "U"}
+          </Text>
+        </View>
+
+        <View style={styles.userInfo}>
+          <TextInput
+            style={styles.userEmail}
+            value={email}
+            editable={isEditing}
+            onChangeText={setEmail}
+          />
+          <TextInput
+            style={styles.communityInput}
+            value={community}
+            editable={isEditing}
+            onChangeText={setCommunity}
+            placeholder="Tu comunidad"
+          />
+        </View>
 
         <TouchableOpacity
+          style={styles.editChip}
           onPress={() => setIsEditing(!isEditing)}
-          style={styles.editBadge}
         >
-          <Text style={styles.editBadgeText}>
+          <Text style={styles.editChipText}>
             {isEditing ? "Guardar" : "Editar"}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* TARJETA PERFIL */}
-      <View style={styles.card}>
-        <View style={styles.avatarBox}>
-          <Text style={styles.avatarInitial}>
-            {displayName.charAt(0).toUpperCase()}
-          </Text>
-        </View>
+      {/* SOBRE MI */}
+      <Text style={styles.sectionLabel}>SOBRE MÍ</Text>
 
-        <View style={{ flex: 1 }}>
-          {isEditing ? (
-            <>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Correo"
-              />
-              <TextInput
-                style={styles.input}
-                value={community}
-                onChangeText={setCommunity}
-                placeholder="Comunidad"
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.contactText}>{email}</Text>
-              <Text style={styles.contactText}>{community}</Text>
-            </>
-          )}
-        </View>
+      <View style={styles.aboutCard}>
+        <TextInput
+          style={styles.aboutInput}
+          value={aboutMe}
+          multiline
+          editable={isEditing}
+          onChangeText={setAboutMe}
+        />
       </View>
 
-      {/* SOBRE MÍ */}
-      <Text style={styles.sectionTitle}>SOBRE MÍ</Text>
+      {/* EVENTOS */}
+      <Text style={styles.sectionLabel}>MIS EVENTOS</Text>
 
-      <View style={styles.textCard}>
-        {isEditing ? (
-          <TextInput
-            style={styles.aboutInput}
-            value={aboutMe}
-            multiline
-            onChangeText={setAboutMe}
-          />
-        ) : (
-          <Text style={styles.aboutText}>{aboutMe}</Text>
-        )}
-      </View>
-
-      {/* MIS EVENTOS */}
-      <Text style={styles.sectionTitle}>MIS EVENTOS</Text>
-
+      {/* BOTONES TABS */}
       <View style={styles.tabsRow}>
         <TouchableOpacity
           style={[
@@ -176,8 +155,8 @@ export default function ProfileScreen() {
         >
           <Text
             style={[
-              styles.tabText,
-              selectedTab === "created" && styles.tabTextActive,
+              styles.tabButtonText,
+              selectedTab === "created" && styles.tabButtonTextActive,
             ]}
           >
             Creados ({createdEvents.length})
@@ -187,14 +166,14 @@ export default function ProfileScreen() {
         <TouchableOpacity
           style={[
             styles.tabButton,
-            selectedTab === "attending" && styles.tabButtonActive,
+            selectedTab === "attending" && styles.tabButtonActiveOutline,
           ]}
           onPress={() => setSelectedTab("attending")}
         >
           <Text
             style={[
-              styles.tabText,
-              selectedTab === "attending" && styles.tabTextActive,
+              styles.tabButtonText,
+              selectedTab === "attending" && styles.tabButtonTextOutlineActive,
             ]}
           >
             Asistiré ({attendingEvents.length})
@@ -202,164 +181,182 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading && <ActivityIndicator size="large" color="#7AC943" />}
-
-      {!loading && currentEvents.length === 0 && (
-        <Text style={styles.emptyEvents}>No hay eventos.</Text>
-      )}
-
-      {!loading &&
-        currentEvents.map((ev) => {
-          const { day, monthStr } = formatDateLabel(ev.start_date);
+      {/* LISTA DE EVENTOS */}
+      {loading ? (
+        <Text style={styles.emptyText}>Cargando…</Text>
+      ) : currentList.length === 0 ? (
+        <Text style={styles.emptyText}>No hay eventos.</Text>
+      ) : (
+        currentList.map((e, index) => {
+          const { dateLabel, timeLabel } = formatDateTime(e);
 
           return (
-            <View key={ev.id} style={styles.eventCard}>
-              <View style={styles.eventDateBox}>
-                <Text style={styles.eventDay}>{day}</Text>
-                <Text style={styles.eventMonth}>{monthStr}</Text>
+            <View
+              key={String(e.id ?? `${e.name}-${index}`)}
+              style={styles.eventCard}
+            >
+              <View style={styles.dateBox}>
+                <Text style={styles.dateDay}>{dateLabel}</Text>
               </View>
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.eventTitle}>{ev.name}</Text>
-                <Text style={styles.eventSubText}>
-                  {ev.start_time} · {ev.place}
-                </Text>
-                <Text style={styles.eventSubText}>
-                  {ev.category_name} · {ev.attendees_count} vecinos asistirán
-                </Text>
+              <View style={styles.eventInfo}>
+                <Text style={styles.eventName}>{e.name}</Text>
+                {!!timeLabel && <Text style={styles.eventMeta}>{timeLabel}</Text>}
+                {!!e.place && <Text style={styles.eventMeta}>{e.place}</Text>}
+                {!!e.category_name && (
+                  <Text style={styles.eventCategory}>{e.category_name}</Text>
+                )}
               </View>
             </View>
           );
-        })}
+        })
+      )}
     </ScrollView>
   );
 }
 
-const PURPLE = "#7E57C2";
-const GREEN = "#7AC943";
-const LIGHT_BG = "#F7F7F7";
-
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: LIGHT_BG },
-  content: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 },
+  screen: { flex: 1, backgroundColor: "#FFF" },
+  content: { paddingHorizontal: 24, paddingBottom: 50 },
 
-  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  menuIcon: {
-    width: 32,
-    height: 32,
-    backgroundColor: GREEN,
-    borderRadius: 6,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-  },
-  menuLine: {
-    width: 18,
-    height: 2,
-    backgroundColor: "white",
-    marginVertical: 1,
-  },
-  headerTitle: { fontSize: 18, fontWeight: "600" },
-
-  nameRow: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
+    marginTop: 30,
+    marginBottom: 20,
   },
-  nameText: { fontSize: 18, color: PURPLE, fontWeight: "700" },
-
-  editBadge: {
-    backgroundColor: "#FFE0B2",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  editBadgeText: { color: "#E65100", fontSize: 12, fontWeight: "600" },
-
-  card: {
-    flexDirection: "row",
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 24,
-  },
-
-  avatarBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: GREEN,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  avatarInitial: { fontSize: 24, color: "white", fontWeight: "700" },
-
-  contactText: { fontSize: 14, color: "#555" },
-
-  input: {
-    backgroundColor: "#F3F3F3",
-    padding: 8,
+  menuButton: {
+    width: 40,
+    height: 40,
     borderRadius: 8,
-    marginBottom: 8,
-  },
-
-  sectionTitle: {
-    fontSize: 14,
-    color: PURPLE,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-
-  textCard: {
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 24,
-  },
-
-  aboutText: { fontSize: 14, lineHeight: 20 },
-  aboutInput: { minHeight: 100, fontSize: 14 },
-
-  tabsRow: { flexDirection: "row", marginBottom: 12 },
-  tabButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: GREEN,
-    paddingVertical: 8,
-    borderRadius: 6,
-    alignItems: "center",
-    marginRight: 8,
-  },
-  tabButtonActive: { backgroundColor: GREEN },
-
-  tabText: { color: GREEN, fontWeight: "600" },
-  tabTextActive: { color: "white" },
-
-  emptyEvents: { color: "#777", textAlign: "center", marginTop: 8 },
-
-  eventCard: {
-    flexDirection: "row",
-    backgroundColor: "white",
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-    elevation: 1,
-  },
-
-  eventDateBox: {
-    width: 60,
-    backgroundColor: GREEN,
-    borderRadius: 10,
+    backgroundColor: "#7CC84E",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
+  menuLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: "#FFF",
+    marginVertical: 2,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#222",
+  },
 
-  eventDay: { fontSize: 18, fontWeight: "700", color: "white" },
-  eventMonth: { fontSize: 12, fontWeight: "600", color: "white" },
+  sectionLabel: {
+    marginTop: 15,
+    marginBottom: 6,
+    color: "#7A3EB0",
+    fontWeight: "700",
+    fontSize: 14,
+  },
 
-  eventTitle: { fontWeight: "600", fontSize: 15 },
-  eventSubText: { color: "#666", fontSize: 12 },
+  userCard: {
+    backgroundColor: "#FFF",
+    padding: 16,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    elevation: 3,
+  },
+  avatarCircle: {
+    width: 55,
+    height: 55,
+    borderRadius: 14,
+    backgroundColor: "#7CC84E",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  avatarText: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#FFF",
+  },
+  userInfo: { flex: 1 },
+  userEmail: { fontWeight: "600", fontSize: 14, marginBottom: 4 },
+  communityInput: { fontSize: 13, color: "#555" },
+
+  editChip: {
+    backgroundColor: "#FF9C57",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  editChipText: { color: "#FFF", fontWeight: "700", fontSize: 12 },
+
+  aboutCard: {
+    backgroundColor: "#FFF",
+    padding: 16,
+    borderRadius: 16,
+    elevation: 3,
+  },
+  aboutInput: {
+    minHeight: 60,
+    fontSize: 14,
+    color: "#444",
+  },
+
+  tabsRow: { flexDirection: "row", marginTop: 10, marginBottom: 12 },
+  tabButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#7CC84E",
+    paddingVertical: 10,
+    borderRadius: 22,
+    alignItems: "center",
+    marginRight: 8,
+  },
+  tabButtonActive: {
+    backgroundColor: "#7CC84E",
+  },
+  tabButtonActiveOutline: {
+    backgroundColor: "#FFF",
+  },
+  tabButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#7CC84E",
+  },
+  tabButtonTextActive: { color: "#FFF" },
+  tabButtonTextOutlineActive: { color: "#7CC84E" },
+
+  emptyText: {
+    textAlign: "center",
+    color: "#777",
+    marginTop: 20,
+    fontSize: 14,
+  },
+
+  eventCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFF",
+    padding: 12,
+    borderRadius: 16,
+    elevation: 3,
+    marginBottom: 12,
+  },
+  dateBox: {
+    width: 60,
+    backgroundColor: "#7CC84E",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 4,
+    marginRight: 12,
+  },
+  dateDay: { color: "#FFF", fontWeight: "700" },
+
+  eventInfo: { flex: 1 },
+  eventName: { fontWeight: "600", fontSize: 16 },
+  eventMeta: { fontSize: 12, color: "#666" },
+  eventCategory: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#7A3EB0",
+  },
 });
