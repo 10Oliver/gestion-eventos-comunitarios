@@ -1,22 +1,74 @@
-import { View, Text, StyleSheet, Image } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import React from 'react';
+import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+
+type DisplayUser = {
+  name?: string;
+  email?: string;
+  photo_url?: string;
+};
 
 export default function Home() {
-  const { email, name, picture } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const [user, setUser] = React.useState<DisplayUser>({
+    name: typeof params.name === 'string' ? params.name : undefined,
+    email: typeof params.email === 'string' ? params.email : undefined,
+    photo_url: typeof params.picture === 'string' ? params.picture : undefined,
+  });
+  const [loading, setLoading] = React.useState(!user.email);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      (async () => {
+        try {
+          const { getCurrentUserId } = await import('../../lib/db');
+          const { getUserById } = await import('../../lib/models/users');
+          const currentUserId = await getCurrentUserId();
+          if (!currentUserId) return;
+          const dbUser = await getUserById(currentUserId);
+          if (dbUser && isActive) {
+            setUser((prev) => ({
+              name: dbUser.name ?? prev.name,
+              email: dbUser.email ?? prev.email,
+              photo_url: dbUser.photo_url ?? prev.photo_url,
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading user profile', error);
+        } finally {
+          if (isActive) setLoading(false);
+        }
+      })();
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  const hasAvatar = !!user.photo_url;
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome!</Text>
-      
-      {picture && typeof picture === 'string' && (
-        <Image 
-          source={{ uri: picture }} 
-          style={styles.avatar}
-        />
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#4285F4" style={{ marginVertical: 16 }} />
+      ) : (
+        <>
+          {hasAvatar && (
+            <Image source={{ uri: user.photo_url }} style={styles.avatar} />
+          )}
+
+          {user.name && <Text style={styles.name}>{user.name}</Text>}
+          {user.email ? (
+            <Text style={styles.email}>{user.email}</Text>
+          ) : (
+            <Text style={[styles.email, styles.emailPlaceholder]}>Correo no disponible</Text>
+          )}
+        </>
       )}
-      
-      {name && <Text style={styles.name}>{name}</Text>}
-      <Text style={styles.email}>{email}</Text>
     </View>
   );
 }
@@ -47,5 +99,10 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 16,
     color: '#666',
+  },
+  emailPlaceholder: {
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginHorizontal: 32,
   },
 });
