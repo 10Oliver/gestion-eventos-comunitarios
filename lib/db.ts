@@ -76,32 +76,6 @@ export async function initializeDatabase() {
       await run(`INSERT OR IGNORE INTO categories(name) VALUES (?)`, [name]);
     }
   }
-
-  // Seed test users and events if empty
-  const uCount = await getSingle<{ c: number }>(`SELECT COUNT(1) as c FROM users`);
-  if (!uCount || uCount.c === 0) {
-    await run(`INSERT INTO users (id, name, email, photo_url) VALUES (?, ?, ?, ?)`, ['seed-user-1', 'Usuario Uno', 'uno@example.com', null]);
-    await run(`INSERT INTO users (id, name, email, photo_url) VALUES (?, ?, ?, ?)`, ['seed-user-2', 'Usuario Dos', 'dos@example.com', null]);
-  }
-
-  const eCount = await getSingle<{ c: number }>(`SELECT COUNT(1) as c FROM events`);
-  if (!eCount || eCount.c === 0) {
-    const deportes = await getSingle<{ id: number }>(`SELECT id FROM categories WHERE name=?`, ['Deportes']);
-    const artes = await getSingle<{ id: number }>(`SELECT id FROM categories WHERE name=?`, ['Artes y creatividad']);
-    const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-    const d = new Date();
-    const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const tmr = new Date(d.getTime() + 24 * 60 * 60 * 1000);
-    const tomorrow = `${tmr.getFullYear()}-${pad(tmr.getMonth() + 1)}-${pad(tmr.getDate())}`;
-
-    await run(`INSERT INTO events(name, place, start_date, end_date, start_time, end_time, category_id, description, created_by) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['Partido local', 'Cancha central', today, today, '10:00', '12:00', deportes?.id ?? 1, 'Evento de prueba deportes', 'seed-user-1']);
-    await run(`INSERT INTO events(name, place, start_date, end_date, start_time, end_time, category_id, description, created_by) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['Pintura al aire libre', 'Parque', tomorrow, tomorrow, '09:00', '11:00', artes?.id ?? 1, 'Evento de prueba artes', 'seed-user-2']);
-
-    const ev1 = await getSingle<{ id: number }>(`SELECT id FROM events WHERE name=? ORDER BY id DESC LIMIT 1`, ['Pintura al aire libre']);
-    const ev2 = await getSingle<{ id: number }>(`SELECT id FROM events WHERE name=? ORDER BY id DESC LIMIT 1`, ['Partido local']);
-    if (ev2?.id) await run(`INSERT OR IGNORE INTO event_attendees(event_id, user_id) VALUES(?, ?)`, [ev2.id, 'seed-user-2']);
-    if (ev1?.id) await run(`INSERT OR IGNORE INTO event_attendees(event_id, user_id) VALUES(?, ?)`, [ev1.id, 'seed-user-1']);
-  }
 }
 
 export async function run(sql: string, params: any[] = []) {
