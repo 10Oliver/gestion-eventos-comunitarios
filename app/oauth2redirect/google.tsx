@@ -10,7 +10,7 @@ export default function GoogleRedirect() {
   useEffect(() => {
     const { email, name, picture } = params;
     router.replace({
-      pathname: '/(tabs)/home',
+      pathname: '/(app)/home',
       params: {
         email: email || '',
         name: name || '',
