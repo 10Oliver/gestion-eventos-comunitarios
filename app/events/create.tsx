@@ -2,295 +2,393 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
+  ActivityIndicator,
+  Modal,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { createEvent } from "../../lib/models/events";
-import { getAllCategories } from "../../lib/models/categories";
+import { Category, getAllCategories } from "../../lib/models/categories";
 
-
-type Category = {
-  id: number;
-  name: string;
-  description?: string;
-};
+const USER_ID = "1"; 
 
 export default function CreateEventScreen() {
-  const router = useRouter();
-
   const [name, setName] = useState("");
   const [place, setPlace] = useState("");
-  const [date, setDate] = useState("");        // formato: YYYY-MM-DD
-  const [time, setTime] = useState("");        // formato: HH:mm
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [description, setDescription] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(
     null
   );
-  const [loading, setLoading] = useState(false);
+
+  const [saving, setSaving] = useState(false);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   useEffect(() => {
-    const loadCategories = async () => {
+    const load = async () => {
       try {
-        const rows = await getAllCategories();
-        setCategories(rows as any);
+        setLoadingCategories(true);
+        const data = await getAllCategories();
+        setCategories(data);
       } catch (error) {
-        console.error("Error cargando categorías", error);
+        console.error("Error cargando categorías:", error);
+        Alert.alert("Error", "No fue posible cargar las categorías.");
+      } finally {
+        setLoadingCategories(false);
       }
     };
 
-    loadCategories();
+    load();
   }, []);
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (
       !name.trim() ||
       !place.trim() ||
-      !date.trim() ||
-      !time.trim() ||
-      !description.trim() ||
+      !startDate.trim() ||
+      !startTime.trim() ||
       !selectedCategoryId
     ) {
       Alert.alert(
         "Campos incompletos",
-        "Por favor completa todos los campos y selecciona una categoría."
+        "Nombre, lugar, fecha inicial, hora inicial y categoría son obligatorios."
       );
       return;
     }
 
-    setLoading(true);
-
     try {
+      setSaving(true);
+
       await createEvent({
         name: name.trim(),
         place: place.trim(),
-        start_date: date.trim(),
-        end_date: date.trim(), 
-        start_time: time.trim(),
-        end_time: time.trim(), 
-        category_id: selectedCategoryId,
+        start_date: startDate.trim(),
+        end_date: endDate.trim() || startDate.trim(),
+        start_time: startTime.trim(),
+        end_time: endTime.trim() || startTime.trim(),
         description: description.trim(),
-        
-        created_by: "1",
-      } as any);
+        category_id: selectedCategoryId,
+        created_by: USER_ID,
+      });
 
-      Alert.alert("Éxito", "El evento se creó correctamente.", [
+      Alert.alert("Éxito", "Evento creado correctamente.", [
         {
           text: "OK",
-          onPress: () => {
-           
-            router.replace("/events");
-          },
+          onPress: () => router.back(),
         },
       ]);
     } catch (error) {
-      console.error("Error creando evento", error);
-      Alert.alert(
-        "Error",
-        "Ocurrió un problema al crear el evento. Inténtalo de nuevo."
-      );
+      console.error("Error creando evento:", error);
+      Alert.alert("Error", "No fue posible crear el evento.");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const handleGoBack = () => {
-   
-    router.back();
-  };
-
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* Encabezado */}
-        <Text style={styles.title}>Nuevo Evento</Text>
-        <Text style={styles.subtitle}>
-          Agrega los datos principales del evento para compartirlo con la
-          comunidad.
-        </Text>
+    <View style={styles.container}>
+      {/* MENÚ LATERAL */}
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setMenuVisible(false)}
+        >
+          <View style={styles.sideMenu}>
+            <Text style={styles.menuTitle}>Menú</Text>
 
-        {/* Nombre */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push("/(tabs)/home");
+              }}
+            >
+              <Text style={styles.menuItemText}>Inicio</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push("/(tabs)/categories");
+              }}
+            >
+              <Text style={styles.menuItemText}>Categorías</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push("/(tabs)/events");
+              }}
+            >
+              <Text style={styles.menuItemText}>Eventos</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push("/(tabs)/profile");
+              }}
+            >
+              <Text style={styles.menuItemText}>Mi perfil</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* HEADER */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => setMenuVisible(true)}
+        >
+          <View style={styles.menuIconLine} />
+          <View style={styles.menuIconLine} />
+          <View style={styles.menuIconLine} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Crear evento</Text>
+      </View>
+
+      {/* FORMULARIO */}
+      <ScrollView
+        style={styles.form}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
+        <Text style={styles.label}>Nombre del evento</Text>
         <TextInput
           style={styles.input}
-          placeholder="Nombre del evento"
-          placeholderTextColor="#c9e6b8"
+          placeholder="Ej. Taller de velas"
           value={name}
           onChangeText={setName}
         />
 
-        {/* Lugar */}
+        <Text style={styles.label}>Lugar</Text>
         <TextInput
           style={styles.input}
-          placeholder="Lugar"
-          placeholderTextColor="#c9e6b8"
+          placeholder="Ej. Plaza Gerardo Barrios"
           value={place}
           onChangeText={setPlace}
         />
 
-        {/* Fecha */}
+        <Text style={styles.label}>Fecha de inicio (YYYY-MM-DD)</Text>
         <TextInput
           style={styles.input}
-          placeholder="Fecha (YYYY-MM-DD)"
-          placeholderTextColor="#c9e6b8"
-          value={date}
-          onChangeText={setDate}
+          placeholder="2025-12-06"
+          value={startDate}
+          onChangeText={setStartDate}
         />
 
-        {/* Hora */}
+        <Text style={styles.label}>Fecha de fin (opcional)</Text>
         <TextInput
           style={styles.input}
-          placeholder="Hora (HH:mm)"
-          placeholderTextColor="#c9e6b8"
-          value={time}
-          onChangeText={setTime}
+          placeholder="2025-12-06"
+          value={endDate}
+          onChangeText={setEndDate}
         />
 
-        {/* Categoría */}
+        <Text style={styles.label}>Hora de inicio (HH:MM)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="13:30"
+          value={startTime}
+          onChangeText={setStartTime}
+        />
+
+        <Text style={styles.label}>Hora de fin (opcional)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="15:00"
+          value={endTime}
+          onChangeText={setEndTime}
+        />
+
         <Text style={styles.label}>Categoría</Text>
-        <View style={styles.categoryRow}>
-          {categories.map((cat) => (
-            <TouchableOpacity
-              key={cat.id}
-              style={[
-                styles.categoryChip,
-                selectedCategoryId === cat.id && styles.categoryChipSelected,
-              ]}
-              onPress={() => setSelectedCategoryId(cat.id)}
-            >
-              <Text
+        {loadingCategories ? (
+          <ActivityIndicator style={{ marginVertical: 8 }} />
+        ) : (
+          <View style={styles.chipRow}>
+            {categories.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
                 style={[
-                  styles.categoryChipText,
-                  selectedCategoryId === cat.id &&
-                    styles.categoryChipTextSelected,
+                  styles.chip,
+                  selectedCategoryId === cat.id && styles.chipSelected,
                 ]}
+                onPress={() => setSelectedCategoryId(cat.id)}
               >
-                {cat.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    styles.chipText,
+                    selectedCategoryId === cat.id && styles.chipTextSelected,
+                  ]}
+                >
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
-        {/* Descripción */}
+        <Text style={styles.label}>Descripción</Text>
         <TextInput
           style={[styles.input, styles.textArea]}
-          placeholder="Sobre el evento"
-          placeholderTextColor="#c9e6b8"
+          placeholder="Escribe una breve descripción del evento"
           value={description}
           onChangeText={setDescription}
           multiline
         />
 
-        {/* Botón Crear evento */}
         <TouchableOpacity
-          style={[styles.button, loading && { opacity: 0.7 }]}
-          onPress={handleCreate}
-          disabled={loading}
+          style={styles.saveButton}
+          onPress={handleSave}
+          disabled={saving}
         >
-          <Text style={styles.buttonText}>
-            {loading ? "Creando..." : "Crear evento"}
+          <Text style={styles.saveButtonText}>
+            {saving ? "Guardando..." : "Crear evento"}
           </Text>
         </TouchableOpacity>
-
-        {/* Botón Regresar */}
-        <TouchableOpacity onPress={handleGoBack}>
-          <Text style={styles.backText}>Regresar</Text>
-        </TouchableOpacity>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 24,
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingTop: 24,
-    paddingBottom: 40,
+    paddingBottom: 16,
+    paddingHorizontal: 24,
+    backgroundColor: "#FFFFFF",
   },
-  title: {
-    fontSize: 28,
+  menuButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "#22C55E",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  menuIconLine: {
+    width: 24,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    marginVertical: 2,
+  },
+  headerTitle: {
+    fontSize: 22,
     fontWeight: "700",
-    color: "#51B548", 
+    color: "#111827",
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#555",
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  input: {
-    backgroundColor: "#f3ffe8",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 12,
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: "#e0f3cf",
-  },
-  textArea: {
-    height: 110,
-    textAlignVertical: "top",
+  form: {
+    paddingHorizontal: 24,
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 6,
-    marginTop: 4,
+    color: "#6B21A8",
+    marginTop: 16,
+    marginBottom: 4,
   },
-  categoryRow: {
+  input: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    backgroundColor: "#F9FAFB",
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: 16,
+    marginTop: 4,
   },
-  categoryChip: {
+  chip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#51B548",
-    backgroundColor: "#fff",
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
   },
-  categoryChipSelected: {
-    backgroundColor: "#51B548",
+  chipSelected: {
+    backgroundColor: "#22C55E",
+    borderColor: "#22C55E",
   },
-  categoryChipText: {
+  chipText: {
     fontSize: 13,
-    color: "#51B548",
-    fontWeight: "500",
+    color: "#4B5563",
   },
-  categoryChipTextSelected: {
-    color: "#fff",
+  chipTextSelected: {
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
-  button: {
-    backgroundColor: "#51B548",
-    borderRadius: 24,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 8,
+  saveButton: {
+    marginTop: 28,
     marginBottom: 8,
+    backgroundColor: "#22C55E",
+    paddingVertical: 14,
+    borderRadius: 999,
+    alignItems: "center",
   },
-  buttonText: {
-    color: "#fff",
+  saveButtonText: {
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
   },
-  backText: {
-    textAlign: "center",
-    color: "#555",
-    textDecorationLine: "underline",
-    marginTop: 8,
-    fontSize: 14,
+
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    flexDirection: "row",
+  },
+  sideMenu: {
+    width: "70%",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 24,
+    paddingTop: 48,
+  },
+  menuTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 16,
+    color: "#111827",
+  },
+  menuItem: {
+    paddingVertical: 12,
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: "#4B5563",
   },
 });

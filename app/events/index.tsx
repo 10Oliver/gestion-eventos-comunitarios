@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,110 +6,156 @@ import {
   FlatList,
   ActivityIndicator,
   TouchableOpacity,
-} from "react-native";
-import { EventWithMeta, getAllUpcomingEventsDesc } from "../../lib/models/events";
+} from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 
+import { initializeDatabase } from '../../lib/db';
+import {
+  EventWithMeta,
+  getAllUpcomingEventsDesc,
+} from '../../lib/models/events';
+
+type EventItem = EventWithMeta & { id?: number };
 
 function formatDateLabel(isoDate: string) {
-  
   try {
-    const [y, m, d] = isoDate.split("-");
+    const [y, m, d] = isoDate.split('-');
     const date = new Date(Number(y), Number(m) - 1, Number(d));
-    const dayStr = d.padStart(2, "0");
+    const dayStr = d.padStart(2, '0');
     const monthStr = date
-      .toLocaleString("es-ES", { month: "short" })
+      .toLocaleString('es-ES', { month: 'short' })
       .toUpperCase();
     return { day: dayStr, month: monthStr };
   } catch {
-    return { day: "??", month: "??" };
+    return { day: '??', month: '??' };
   }
 }
 
 export default function EventsScreen() {
-  const [events, setEvents] = useState<EventWithMeta[]>([]);
+  const { categoryId, categoryName } = useLocalSearchParams<{
+    categoryId?: string;
+    categoryName?: string;
+  }>();
+
+  const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
+    const loadEvents = async () => {
       try {
-        const rows = await getAllUpcomingEventsDesc();
-        setEvents(rows);
+        setLoading(true);
+        await initializeDatabase();
+
+        const all = (await getAllUpcomingEventsDesc()) as EventItem[];
+
+        let filtered = all;
+        if (categoryId) {
+          filtered = all.filter(
+            (e) => String((e as any).category_id) === String(categoryId)
+          );
+        }
+
+        setEvents(filtered);
       } catch (err) {
-        console.error("Error cargando eventos:", err);
+        console.error('Error cargando eventos:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    load();
-  }, []);
+    loadEvents();
+  }, [categoryId]);
 
-  if (loading) {
+  const handlePressEvent = (event: EventItem) => {
+    if (!event.id) return;
+    router.push({
+      pathname: '/events/[id]',
+      params: { id: String(event.id) },
+    });
+  };
+
+  const renderItem = ({ item }: { item: EventItem }) => {
+    const { day, month } = formatDateLabel(item.start_date);
+    const timeRange = `${item.start_time} - ${item.end_time}`;
+
     return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-        <Text>Cargando eventos...</Text>
+      <View style={styles.card}>
+        {/* Fecha */}
+        <View style={styles.dateBox}>
+          <Text style={styles.dateDay}>{day}</Text>
+          <Text style={styles.dateMonth}>{month}</Text>
+        </View>
+
+        {/* Info del evento */}
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardTitle}>{item.name}</Text>
+          <Text style={styles.cardLine}>{timeRange}</Text>
+          <Text style={styles.cardLine}>{item.place}</Text>
+          <Text style={styles.cardLine}>
+            {item.category_name} · {item.attendees_count} vecinos asistirán
+          </Text>
+        </View>
+
+        {/* Botón + funcional */}
+        <TouchableOpacity
+          style={styles.plusCircle}
+          onPress={() =>
+  router.push({
+    pathname: "/events/[id]",
+    params: {
+      id: String(item.id),
+      title: item.name,            
+      place: item.place ?? "",
+      start_date: item.start_date,
+      end_date: item.end_date,
+      start_time: item.start_time,
+      end_time: item.end_time,
+      description: item.description ?? "",
+      category_name: item.category_name ?? "",
+    },
+  })
+}
+        >
+          <Text style={styles.plusText}>+</Text>
+        </TouchableOpacity>
       </View>
     );
-  }
+  };
 
-  if (!events.length) {
-    return (
-      <View style={styles.center}>
-        <Text>No hay eventos próximos.</Text>
-      </View>
-    );
-  }
+  const emptyText = categoryId
+    ? 'No hay eventos próximos para esta categoría.'
+    : 'No hay eventos próximos.';
 
   return (
     <View style={styles.container}>
-      {/* Encabezado tipo Figma */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>PRÓXIMOS EVENTOS</Text>
-        <Text style={styles.headerSubtitle}>
-          Explora las diferentes actividades y eventos planificados.
+      <Text style={styles.title}>PRÓXIMOS EVENTOS</Text>
+      <Text style={styles.subtitle}>
+        Explora las diferentes actividades y eventos planificados.
+      </Text>
+      {categoryName ? (
+        <Text style={styles.categoryLabel}>
+          Categoría: <Text style={styles.categoryName}>{categoryName}</Text>
         </Text>
-      </View>
+      ) : null}
 
-      <FlatList
-        data={events}
-        keyExtractor={(item) => item.id!.toString()}
-        contentContainerStyle={{ paddingBottom: 24 }}
-        renderItem={({ item }) => {
-          const { day, month } = formatDateLabel(item.start_date);
-          return (
-            <TouchableOpacity style={styles.card}>
-              {/* Bloque verde con fecha */}
-              <View style={styles.dateBox}>
-                <Text style={styles.dateDay}>{day}</Text>
-                <Text style={styles.dateMonth}>{month}</Text>
-              </View>
-
-              {/* Info del evento */}
-              <View style={styles.info}>
-                <Text style={styles.eventName}>{item.name}</Text>
-
-                <Text style={styles.eventMeta}>
-                  {item.start_time} - {item.end_time}
-                </Text>
-
-                {item.place && (
-                  <Text style={styles.eventMeta}>{item.place}</Text>
-                )}
-
-                <Text style={styles.eventMeta}>
-                  {item.category_name} · {item.attendees_count} vecinos asistirán
-                </Text>
-              </View>
-
-              {/* Botón +  */}
-              <View style={styles.actionBox}>
-                <Text style={styles.plus}>＋</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-      />
+      {loading ? (
+        <ActivityIndicator
+          size="large"
+          color="#7B3AED"
+          style={{ marginTop: 32 }}
+        />
+      ) : events.length === 0 ? (
+        <Text style={styles.emptyText}>{emptyText}</Text>
+      ) : (
+        <FlatList
+          data={events}
+          keyExtractor={(item, index) =>
+            item.id ? String(item.id) : String(index)
+          }
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 24 }}
+        />
+      )}
     </View>
   );
 }
@@ -117,85 +163,93 @@ export default function EventsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 24,
+    paddingTop: 24,
   },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#7B3AED',
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  header: {
+  subtitle: {
+    fontSize: 14,
+    color: '#555555',
+    textAlign: 'center',
     marginBottom: 16,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#7E3FA5", 
-    textAlign: "center",
+  categoryLabel: {
+    fontSize: 14,
+    color: '#555555',
+    textAlign: 'center',
+    marginBottom: 16,
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "#666",
-    textAlign: "center",
-    marginTop: 4,
+  categoryName: {
+    fontWeight: '600',
+    color: '#4CAF50',
+  },
+  emptyText: {
+    marginTop: 40,
+    textAlign: 'center',
+    color: '#777777',
   },
   card: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F9F9F9",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E2E2E2",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F7F7',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   dateBox: {
-    width: 54,
-    height: 64,
-    backgroundColor: "#76C64B",
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+    width: 64,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: '#6BCB3C',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   dateDay: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#fff",
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   dateMonth: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#fff",
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  info: {
+  cardInfo: {
     flex: 1,
   },
-  eventName: {
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 2,
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#222222',
   },
-  eventMeta: {
-    fontSize: 12,
-    color: "#666",
+  cardLine: {
+    fontSize: 13,
+    color: '#666666',
   },
-  actionBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#F36C3D",
-    alignItems: "center",
-    justifyContent: "center",
+  plusCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#FF7A45',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
-  plus: {
-    fontSize: 20,
-    color: "#F36C3D",
-    fontWeight: "700",
-    lineHeight: 20,
+  plusText: {
+    fontSize: 22,
+    color: '#FF7A45',
+    fontWeight: '700',
+    marginTop: -2,
   },
 });
