@@ -14,9 +14,17 @@ const X_DISCOVERY = {
 };
 
 const X_SCOPES = ['tweet.read', 'users.read', 'offline.access'];
+const GITHUB_DISCOVERY = {
+  authorizationEndpoint: 'https://github.com/login/oauth/authorize',
+  tokenEndpoint: 'https://github.com/login/oauth/access_token',
+};
+
+const GITHUB_SCOPES = ['read:user', 'user:email'];
+const GITHUB_API_VERSION = '2022-11-28';
 
 type NativePromptOptions = AuthRequestPromptOptions & { useProxy?: boolean };
 const NATIVE_PROMPT_OPTIONS: NativePromptOptions = { useProxy: false };
+const GITHUB_PROMPT_OPTIONS: NativePromptOptions = { useProxy: true };
 
 export default function LoginScreen() {
   const redirectUri = makeRedirectUri({
@@ -29,8 +37,17 @@ export default function LoginScreen() {
     path: 'oauth2redirect/x',
     native: 'com.gestioneventoscomunitarios.app://oauth2redirect/x',
   });
+  const githubRedirectUri = makeRedirectUri({
+    scheme: 'com.gestioneventoscomunitarios.app',
+    path: 'oauth2redirect/github',
+    native: 'com.gestioneventoscomunitarios.app://oauth2redirect/github',
+    useProxy: true,
+  });
   const xClientId = process.env.EXPO_PUBLIC_X_CLIENT_ID;
   const isXConfigured = Boolean(xClientId);
+  const githubClientId = process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID;
+  const githubClientSecret = process.env.EXPO_PUBLIC_GITHUB_CLIENT_SECRET;
+  const isGithubConfigured = Boolean(githubClientId && githubClientSecret);
 
   const [, response, promptAsync] = Google.useIdTokenAuthRequest({
     androidClientId: '803821575234-t80td046s7p84alkpehmqrhk5slllh8d.apps.googleusercontent.com',
@@ -48,8 +65,27 @@ export default function LoginScreen() {
     X_DISCOVERY
   );
 
-  const [isXLoading, setIsXLoading] = React.useState(false);
+  const [githubRequest, githubResponse, promptGithubAsync] = useAuthRequest(
+    {
+      clientId: githubClientId || 'missing-github-client-id',
+      redirectUri: githubRedirectUri,
+      responseType: ResponseType.Code,
+      scopes: GITHUB_SCOPES,
+      usePKCE: true,
+    },
+    GITHUB_DISCOVERY
+  );
 
+  const [isXLoading, setIsXLoading] = React.useState(false);
+  const [isGithubLoading, setIsGithubLoading] = React.useState(false);
+  const buildGithubHeaders = React.useCallback(
+    (token: string) => ({
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': GITHUB_API_VERSION,
+    }),
+    []
+  );
   const persistUserSession = React.useCallback(async ({
     id,
     name,
@@ -170,6 +206,93 @@ export default function LoginScreen() {
     }
   }, [xResponse, xRequest, xClientId, xRedirectUri, persistUserSession]);
 
+  React.useEffect(() => {
+    if (
+      githubResponse?.type === 'success' &&
+      githubResponse.params.code &&
+      githubClientId &&
+      githubClientSecret &&
+      githubRequest
+    ) {
+      setIsGithubLoading(true);
+      (async () => {
+        try {
+          const tokenResult = await exchangeCodeAsync(
+            {
+              clientId: githubClientId,
+              code: githubResponse.params.code,
+              redirectUri: githubRedirectUri,
+              extraParams: {
+                client_secret: githubClientSecret,
+                code_verifier: githubRequest.codeVerifier || '',
+              },
+            },
+            GITHUB_DISCOVERY
+          );
+
+          if (!tokenResult?.accessToken) {
+            throw new Error('No access token returned from GitHub.');
+          }
+
+          const baseHeaders = buildGithubHeaders(tokenResult.accessToken);
+
+          const profileRes = await fetch('https://api.github.com/user', {
+            headers: baseHeaders,
+          });
+
+          if (!profileRes.ok) {
+            throw new Error('Unable to fetch GitHub profile.');
+          }
+
+          const profile = (await profileRes.json()) as {
+            id?: number;
+            node_id?: string;
+            name?: string;
+            login?: string;
+            email?: string;
+            avatar_url?: string;
+          };
+
+          let githubEmail = profile.email || '';
+          if (!githubEmail) {
+            const emailsRes = await fetch('https://api.github.com/user/emails', {
+              headers: baseHeaders,
+            });
+            if (emailsRes.ok) {
+              const emails = (await emailsRes.json()) as Array<{
+                email: string;
+                primary?: boolean;
+                verified?: boolean;
+              }>;
+              const primaryEmail = emails.find((mail) => mail.primary && mail.verified);
+              githubEmail = primaryEmail?.email || emails[0]?.email || '';
+            }
+          }
+
+          const githubId = profile.id?.toString() || profile.node_id || githubEmail;
+          await persistUserSession({
+            id: githubId || 'github-user',
+            name: profile.name || profile.login,
+            email: githubEmail,
+            photoUrl: profile.avatar_url,
+          });
+        } catch (error) {
+          console.error(error);
+          Alert.alert('Inicio de sesión con GitHub', 'No se pudo completar la autenticación.');
+        } finally {
+          setIsGithubLoading(false);
+        }
+      })();
+    }
+  }, [
+    githubResponse,
+    githubClientId,
+    githubClientSecret,
+    githubRedirectUri,
+    githubRequest,
+    persistUserSession,
+  ]);
+
   const parseJwt = (token: string) => {
     try {
       const base64Url = token.split('.')[1];
@@ -213,6 +336,28 @@ export default function LoginScreen() {
           <Text style={styles.xButtonText}>Continuar con X</Text>
         )}
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.githubButton, (!isGithubConfigured || !githubRequest || isGithubLoading) && styles.buttonDisabled]}
+        onPress={() => {
+          if (!isGithubConfigured) {
+            Alert.alert(
+              'Configuración requerida',
+              'Define EXPO_PUBLIC_GITHUB_CLIENT_ID y EXPO_PUBLIC_GITHUB_CLIENT_SECRET antes de iniciar sesión con GitHub.'
+            );
+            return;
+          }
+          promptGithubAsync?.(GITHUB_PROMPT_OPTIONS).catch(console.error);
+        }}
+        disabled={!isGithubConfigured || !githubRequest || isGithubLoading}
+        activeOpacity={0.85}
+      >
+        {isGithubLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.githubButtonText}>Continuar con GitHub</Text>
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -254,5 +399,18 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.4,
+  },
+  githubButton: {
+    backgroundColor: '#24292e',
+    padding: 15,
+    borderRadius: 5,
+    marginTop: 12,
+    width: '70%',
+    alignItems: 'center',
+  },
+  githubButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

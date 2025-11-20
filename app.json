@@ -2,6 +2,7 @@
   "expo": {
     "name": "Gestion Eventos Comunitarios",
     "slug": "gestion-eventos-comunitarios",
+    "owner": "Firearcher717",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
