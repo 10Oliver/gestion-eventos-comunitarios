@@ -1,5 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseApp, FirebaseOptions, getApp, getApps, initializeApp } from 'firebase/app';
-import { Auth, getAuth } from 'firebase/auth';
+import { Auth, getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
+import { Platform } from 'react-native';
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '',
@@ -28,7 +30,17 @@ declare global {
   var __firebaseAuth: Auth | undefined;
 }
 
-const auth: Auth = globalThis.__firebaseAuth ?? getAuth(app);
-globalThis.__firebaseAuth = auth;
+if (!globalThis.__firebaseAuth) {
+  const authInstance =
+    Platform.OS === 'web'
+      ? getAuth(app)
+      : initializeAuth(app, {
+          persistence: getReactNativePersistence(AsyncStorage),
+        });
+
+  globalThis.__firebaseAuth = authInstance;
+}
+
+const auth: Auth = globalThis.__firebaseAuth;
 
 export { app, auth };
