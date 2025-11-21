@@ -62,7 +62,33 @@ La app incluye inicio de sesión nativo con OAuth 2.0 + PKCE. Si aún no tienes 
 
 Consulta `docs/x-auth-setup.md` para una guía detallada paso a paso.
 
-## 🛠️ Comandos adicionales
+## � Autenticación con correo y contraseña (Firebase)
+
+Además de las redes sociales, la app incluye registro e inicio de sesión nativo con Firebase Authentication. Para activarlo:
+
+1. Crea un proyecto en [Firebase Console](https://console.firebase.google.com/) y añade una app de tipo **Android** con el paquete `com.gestioneventoscomunitarios.app`.
+2. Descarga el `google-services.json` actualizado y colócalo en la raíz del proyecto (reemplaza el existente si ya había uno).
+3. En la consola de Firebase, habilita el proveedor **Email/Password** dentro de `Authentication > Sign-in method`.
+4. Copia las claves del proyecto en tu `.env` usando las variables que ya están definidas:
+
+	```bash
+	EXPO_PUBLIC_FIREBASE_API_KEY=
+	EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
+	EXPO_PUBLIC_FIREBASE_PROJECT_ID=
+	EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
+	EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+	EXPO_PUBLIC_FIREBASE_APP_ID=
+	```
+
+5. Instala dependencias y vuelve a compilar (`npm install && npm run android`) para que el nuevo native module de Firebase Auth quede enlazado.
+
+Con esto tendrás:
+
+- Registro / login con correo y contraseña directamente en la pantalla principal.
+- Persistencia segura de sesión usando Firebase Auth + almacenamiento local.
+- Opción para recuperar contraseña mediante correo (`¿Olvidaste tu contraseña?`).
+
+## �🛠️ Comandos adicionales
 
 #### Limpiar el prebuild
 

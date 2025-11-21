@@ -1,9 +1,28 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
-import { makeRedirectUri, useAuthRequest, ResponseType, exchangeCodeAsync, AuthRequestPromptOptions } from 'expo-auth-session';
+import {
+  makeRedirectUri,
+  useAuthRequest,
+  ResponseType,
+  exchangeCodeAsync,
+  AuthRequestPromptOptions,
+  AuthSessionRedirectUriOptions,
+} from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
+import { normalizeFirebaseError, registerWithEmail, resetPassword, signInWithEmail } from '../lib/auth/email';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -42,7 +61,7 @@ export default function LoginScreen() {
     path: 'oauth2redirect/github',
     native: 'com.gestioneventoscomunitarios.app://oauth2redirect/github',
     useProxy: true,
-  });
+  } as AuthSessionRedirectUriOptions & { useProxy?: boolean });
   const xClientId = process.env.EXPO_PUBLIC_X_CLIENT_ID;
   const isXConfigured = Boolean(xClientId);
   const githubClientId = process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID;
@@ -78,6 +97,10 @@ export default function LoginScreen() {
 
   const [isXLoading, setIsXLoading] = React.useState(false);
   const [isGithubLoading, setIsGithubLoading] = React.useState(false);
+  const [isEmailLoading, setIsEmailLoading] = React.useState(false);
+  const [authMode, setAuthMode] = React.useState<'login' | 'register'>('login');
+  const [emailForm, setEmailForm] = React.useState({ name: '', email: '', password: '' });
+  const [emailError, setEmailError] = React.useState<string | null>(null);
   const buildGithubHeaders = React.useCallback(
     (token: string) => ({
       Authorization: `Bearer ${token}`,
@@ -127,6 +150,65 @@ export default function LoginScreen() {
       Alert.alert('Autenticación', 'No se pudo guardar la sesión local. Intenta de nuevo.');
     }
   }, []);
+
+  const handleEmailAuth = React.useCallback(async () => {
+    const trimmedEmail = emailForm.email.trim();
+    const trimmedPassword = emailForm.password.trim();
+    const trimmedName = emailForm.name.trim();
+    const isRegister = authMode === 'register';
+
+    if (!trimmedEmail || !trimmedPassword) {
+      Alert.alert('Autenticación por correo', 'Ingresa correo y contraseña para continuar.');
+      return;
+    }
+
+    if (isRegister && !trimmedName) {
+      Alert.alert('Crear cuenta', 'Agrega tu nombre para personalizar la cuenta.');
+      return;
+    }
+
+    setIsEmailLoading(true);
+    setEmailError(null);
+    try {
+      const user = isRegister
+        ? await registerWithEmail({
+            email: trimmedEmail,
+            password: trimmedPassword,
+            displayName: trimmedName,
+          })
+        : await signInWithEmail({ email: trimmedEmail, password: trimmedPassword });
+
+      await persistUserSession({
+        id: user.uid,
+        name: user.displayName || trimmedName,
+        email: user.email || trimmedEmail,
+        photoUrl: user.photoURL || undefined,
+      });
+      setEmailForm((current) => ({ ...current, password: '' }));
+    } catch (error) {
+      const message = normalizeFirebaseError(error);
+      setEmailError(message);
+      Alert.alert('Autenticación por correo', message);
+    } finally {
+      setIsEmailLoading(false);
+    }
+  }, [authMode, emailForm, persistUserSession]);
+
+  const handleResetPassword = React.useCallback(async () => {
+    const trimmedEmail = emailForm.email.trim();
+    if (!trimmedEmail) {
+      Alert.alert('Recuperar contraseña', 'Ingresa tu correo para enviarte un enlace.');
+      return;
+    }
+
+    try {
+      await resetPassword(trimmedEmail);
+      Alert.alert('Recuperar contraseña', 'Te enviamos un correo para restablecer tu contraseña.');
+    } catch (error) {
+      const message = normalizeFirebaseError(error);
+      Alert.alert('Recuperar contraseña', message);
+    }
+  }, [emailForm.email]);
 
   React.useEffect(() => {
     if (response?.type === 'success') {
@@ -308,76 +390,260 @@ export default function LoginScreen() {
       return {};
     }
   };
+  const isRegisterMode = authMode === 'register';
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
-      <TouchableOpacity 
-        style={styles.googleButton} 
-        onPress={() => promptAsync(NATIVE_PROMPT_OPTIONS)}>
-        <Text style={styles.googleButtonText}>Sign in with Google</Text>
-      </TouchableOpacity>
+    <KeyboardAvoidingView
+      style={styles.wrapper}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.container}>
+          <Text style={styles.title}>Gestiona tus eventos</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Acceso con correo</Text>
+            <View style={styles.modeToggle}>
+              <TouchableOpacity
+                style={[styles.modeButton, !isRegisterMode && styles.modeButtonActive]}
+                onPress={() => {
+                  setAuthMode('login');
+                  setEmailError(null);
+                }}
+              >
+                <Text style={[styles.modeButtonText, !isRegisterMode && styles.modeButtonTextActive]}>Iniciar sesión</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeButton, isRegisterMode && styles.modeButtonActive]}
+                onPress={() => {
+                  setAuthMode('register');
+                  setEmailError(null);
+                }}
+              >
+                <Text style={[styles.modeButtonText, isRegisterMode && styles.modeButtonTextActive]}>Crear cuenta</Text>
+              </TouchableOpacity>
+            </View>
+            {isRegisterMode && (
+              <TextInput
+                style={styles.input}
+                placeholder="Nombre completo"
+                value={emailForm.name}
+                onChangeText={(text) => setEmailForm((current) => ({ ...current, name: text }))}
+                autoCapitalize="words"
+                placeholderTextColor="#9aa1b2"
+                returnKeyType="next"
+              />
+            )}
+            <TextInput
+              style={styles.input}
+              placeholder="Correo electrónico"
+              value={emailForm.email}
+              onChangeText={(text) => setEmailForm((current) => ({ ...current, email: text }))}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholderTextColor="#9aa1b2"
+              returnKeyType="next"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Contraseña"
+              value={emailForm.password}
+              onChangeText={(text) => setEmailForm((current) => ({ ...current, password: text }))}
+              secureTextEntry
+              placeholderTextColor="#9aa1b2"
+              returnKeyType="done"
+            />
+            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+            <TouchableOpacity
+              style={[styles.primaryButton, isEmailLoading && styles.buttonDisabled]}
+              onPress={handleEmailAuth}
+              disabled={isEmailLoading}
+            >
+              {isEmailLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {isRegisterMode ? 'Crear cuenta' : 'Iniciar sesión'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleResetPassword} style={styles.linkButton}>
+              <Text style={styles.linkText}>¿Olvidaste tu contraseña?</Text>
+            </TouchableOpacity>
+          </View>
 
-      <TouchableOpacity
-        style={[styles.xButton, (!isXConfigured || isXLoading || !xRequest) && styles.buttonDisabled]}
-        onPress={() => {
-          if (!isXConfigured) {
-            Alert.alert('Configuración requerida', 'Define EXPO_PUBLIC_X_CLIENT_ID en tu .env antes de intentar iniciar sesión con X.');
-            return;
-          }
-          promptXAsync?.(NATIVE_PROMPT_OPTIONS).catch(console.error);
-        }}
-        disabled={!isXConfigured || !xRequest || isXLoading}
-        activeOpacity={0.85}
-      >
-        {isXLoading ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.xButtonText}>Continuar con X</Text>
-        )}
-      </TouchableOpacity>
+          <View style={styles.socialSection}>
+            <Text style={styles.sectionLabel}>O continúa con</Text>
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={() => promptAsync(NATIVE_PROMPT_OPTIONS)}
+            >
+              <Text style={styles.googleButtonText}>Continuar con Google</Text>
+            </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.githubButton, (!isGithubConfigured || !githubRequest || isGithubLoading) && styles.buttonDisabled]}
-        onPress={() => {
-          if (!isGithubConfigured) {
-            Alert.alert(
-              'Configuración requerida',
-              'Define EXPO_PUBLIC_GITHUB_CLIENT_ID y EXPO_PUBLIC_GITHUB_CLIENT_SECRET antes de iniciar sesión con GitHub.'
-            );
-            return;
-          }
-          promptGithubAsync?.(GITHUB_PROMPT_OPTIONS).catch(console.error);
-        }}
-        disabled={!isGithubConfigured || !githubRequest || isGithubLoading}
-        activeOpacity={0.85}
-      >
-        {isGithubLoading ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.githubButtonText}>Continuar con GitHub</Text>
-        )}
-      </TouchableOpacity>
-    </View>
+            <TouchableOpacity
+              style={[styles.xButton, (!isXConfigured || isXLoading || !xRequest) && styles.buttonDisabled]}
+              onPress={() => {
+                if (!isXConfigured) {
+                  Alert.alert('Configuración requerida', 'Define EXPO_PUBLIC_X_CLIENT_ID en tu .env antes de intentar iniciar sesión con X.');
+                  return;
+                }
+                promptXAsync?.(NATIVE_PROMPT_OPTIONS).catch(console.error);
+              }}
+              disabled={!isXConfigured || !xRequest || isXLoading}
+              activeOpacity={0.85}
+            >
+              {isXLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.xButtonText}>Continuar con X</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.githubButton, (!isGithubConfigured || !githubRequest || isGithubLoading) && styles.buttonDisabled]}
+              onPress={() => {
+                if (!isGithubConfigured) {
+                  Alert.alert(
+                    'Configuración requerida',
+                    'Define EXPO_PUBLIC_GITHUB_CLIENT_ID y EXPO_PUBLIC_GITHUB_CLIENT_SECRET antes de iniciar sesión con GitHub.'
+                  );
+                  return;
+                }
+                promptGithubAsync?.(GITHUB_PROMPT_OPTIONS).catch(console.error);
+              }}
+              disabled={!isGithubConfigured || !githubRequest || isGithubLoading}
+              activeOpacity={0.85}
+            >
+              {isGithubLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.githubButtonText}>Continuar con GitHub</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     flex: 1,
-    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+  },
+  scroll: {
+    flexGrow: 1,
     alignItems: 'center',
-    backgroundColor: '#fff',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 420,
+    rowGap: 24,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: '#111827',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    rowGap: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    padding: 4,
+    columnGap: 4,
+  },
+  modeButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  modeButtonActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  modeButtonTextActive: {
+    color: '#111827',
+  },
+  input: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0f172a',
+    backgroundColor: '#fff',
+  },
+  errorText: {
+    color: '#dc2626',
+    fontSize: 13,
+  },
+  primaryButton: {
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  linkButton: {
+    alignItems: 'center',
+  },
+  linkText: {
+    color: '#2563eb',
+    fontWeight: '600',
+  },
+  socialSection: {
+    rowGap: 12,
+    width: '100%',
+  },
+  sectionLabel: {
+    textAlign: 'center',
+    color: '#4b5563',
+    fontWeight: '600',
   },
   googleButton: {
     backgroundColor: '#4285F4',
     padding: 15,
-    borderRadius: 5,
+    borderRadius: 10,
+    alignItems: 'center',
   },
   googleButtonText: {
     color: '#fff',
@@ -387,9 +653,7 @@ const styles = StyleSheet.create({
   xButton: {
     backgroundColor: '#000',
     padding: 15,
-    borderRadius: 5,
-    marginTop: 12,
-    width: '70%',
+    borderRadius: 10,
     alignItems: 'center',
   },
   xButtonText: {
@@ -403,9 +667,7 @@ const styles = StyleSheet.create({
   githubButton: {
     backgroundColor: '#24292e',
     padding: 15,
-    borderRadius: 5,
-    marginTop: 12,
-    width: '70%',
+    borderRadius: 10,
     alignItems: 'center',
   },
   githubButtonText: {
