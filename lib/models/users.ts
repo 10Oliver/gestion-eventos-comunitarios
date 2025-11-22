@@ -11,14 +11,36 @@ export type User = {
 
 export async function upsertUser(u: User) {
   await run(
-    `INSERT INTO users (id, name, email, photo_url, description, address)
-     VALUES (?, ?, ?, ?, COALESCE(?, (SELECT description FROM users WHERE id=?)), COALESCE(?, (SELECT address FROM users WHERE id=?)))
-     ON CONFLICT(id) DO UPDATE SET
-       name=excluded.name,
-       email=excluded.email,
-       photo_url=excluded.photo_url`,
-    [u.id, u.name ?? null, u.email ?? null, u.photo_url ?? null, u.description ?? null, u.id, u.address ?? null, u.id]
+    `INSERT OR IGNORE INTO users (id, name, email, photo_url, description, address)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      u.id,
+      u.name ?? null,
+      u.email ?? null,
+      u.photo_url ?? null,
+      u.description ?? null,
+      u.address ?? null,
+    ]
   );
+
+  await run(
+    `UPDATE users SET 
+      name=COALESCE(?, name),
+      email=COALESCE(?, email),
+      photo_url=COALESCE(?, photo_url),
+      description=COALESCE(?, description),
+      address=COALESCE(?, address)
+     WHERE id=?`,
+    [
+      u.name ?? null,
+      u.email ?? null,
+      u.photo_url ?? null,
+      u.description ?? null,
+      u.address ?? null,
+      u.id,
+    ]
+  );
+
 }
 
 export async function getUserById(id: string) {

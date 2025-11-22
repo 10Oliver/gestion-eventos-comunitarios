@@ -59,6 +59,7 @@ export default function Home() {
           Comparte una nueva actividad con tu comunidad.
         </Text>
       </TouchableOpacity>
+
     </View>
   );
 }
