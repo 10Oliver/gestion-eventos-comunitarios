@@ -20,6 +20,8 @@ import {
 } from "../../lib/models/events";
 import { getUsersByIds, updateUserProfile } from "../../lib/models/users";
 
+import TopBar from "../components/TopBar";
+
 const USER_ID = "1"; 
 
 type EventItem = EventWithMeta;
@@ -116,17 +118,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => setMenuVisible(true)}
-        >
-          <View style={styles.menuLine} />
-          <View style={styles.menuLine} />
-          <View style={styles.menuLine} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mi Perfil</Text>
-      </View>
+      <TopBar title="Mi Perfil" />
 
       <ScrollView>
         {/* USUARIO */}
