@@ -1,7 +1,6 @@
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
-import { upsertUser } from '../models/users';
-import { setCurrentUserId } from '../db';
+import { setAuthUser } from './user-store';
 
 export type PersistUserParams = {
   id: string;
@@ -10,21 +9,22 @@ export type PersistUserParams = {
   photoUrl?: string;
 };
 
-export async function persistUserSession({ id, name, email, photoUrl }: PersistUserParams) {
+type PersistUserOptions = {
+  navigate?: boolean;
+};
+
+export async function persistUserSession(
+  { id, name, email, photoUrl }: PersistUserParams,
+  { navigate = true }: PersistUserOptions = {}
+) {
   if (!id) {
     Alert.alert('Autenticación', 'No se pudo obtener el identificador del usuario.');
     return;
   }
 
-  try {
-    await upsertUser({
-      id,
-      name,
-      email,
-      photo_url: photoUrl,
-    });
-    await setCurrentUserId(id);
+  setAuthUser({ id, name, email, photoUrl });
 
+  if (navigate) {
     router.replace({
       pathname: '/(tabs)/home',
       params: {
@@ -33,8 +33,5 @@ export async function persistUserSession({ id, name, email, photoUrl }: PersistU
         picture: photoUrl || '',
       },
     });
-  } catch (error) {
-    console.error(error);
-    Alert.alert('Autenticación', 'No se pudo guardar la sesión local. Intenta de nuevo.');
   }
 }

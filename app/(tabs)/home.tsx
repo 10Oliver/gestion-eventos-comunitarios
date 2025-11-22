@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { getAuthUser, subscribeAuthUser } from '../../lib/auth/user-store';
 
 type DisplayUser = {
   name?: string;
@@ -10,42 +11,52 @@ type DisplayUser = {
 
 export default function Home() {
   const params = useLocalSearchParams();
-  const [user, setUser] = React.useState<DisplayUser>({
-    name: typeof params.name === 'string' ? params.name : undefined,
-    email: typeof params.email === 'string' ? params.email : undefined,
-    photo_url: typeof params.picture === 'string' ? params.picture : undefined,
+  const paramName = typeof params.name === 'string' ? params.name : undefined;
+  const paramEmail = typeof params.email === 'string' ? params.email : undefined;
+  const paramPhoto = typeof params.picture === 'string' ? params.picture : undefined;
+  const [user, setUser] = React.useState<DisplayUser>(() => {
+    const stored = getAuthUser();
+    return {
+      name: paramName ?? stored?.name,
+      email: paramEmail ?? stored?.email,
+      photo_url: paramPhoto ?? stored?.photoUrl,
+    };
   });
-  const [loading, setLoading] = React.useState(!user.email);
+  const [loading, setLoading] = React.useState(false);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      let isActive = true;
-      (async () => {
-        try {
-          const { getCurrentUserId } = await import('../../lib/db');
-          const { getUserById } = await import('../../lib/models/users');
-          const currentUserId = await getCurrentUserId();
-          if (!currentUserId) return;
-          const dbUser = await getUserById(currentUserId);
-          if (dbUser && isActive) {
-            setUser((prev) => ({
-              name: dbUser.name ?? prev.name,
-              email: dbUser.email ?? prev.email,
-              photo_url: dbUser.photo_url ?? prev.photo_url,
-            }));
-          }
-        } catch (error) {
-          console.error('Error loading user profile', error);
-        } finally {
-          if (isActive) setLoading(false);
-        }
-      })();
+  React.useEffect(() => {
+    setUser((prev) => ({
+      name: paramName ?? prev.name,
+      email: paramEmail ?? prev.email,
+      photo_url: paramPhoto ?? prev.photo_url,
+    }));
+  }, [paramName, paramEmail, paramPhoto]);
 
-      return () => {
-        isActive = false;
-      };
-    }, [])
-  );
+  React.useEffect(() => {
+    const stored = getAuthUser();
+    if (stored) {
+      setUser((prev) => ({
+        name: stored.name ?? prev.name,
+        email: stored.email ?? prev.email,
+        photo_url: stored.photoUrl ?? prev.photo_url,
+      }));
+    }
+
+    const unsubscribe = subscribeAuthUser((next) => {
+      if (!next) {
+        setUser({ name: undefined, email: undefined, photo_url: undefined });
+        return;
+      }
+
+      setUser((prev) => ({
+        name: next.name ?? prev.name,
+        email: next.email ?? prev.email,
+        photo_url: next.photoUrl ?? prev.photo_url,
+      }));
+    });
+
+    return unsubscribe;
+  }, []);
 
   const hasAvatar = !!user.photo_url;
 

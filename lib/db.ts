@@ -1,19 +1,18 @@
-import * as SQLite from 'expo-sqlite/legacy';
+import * as SQLite from 'expo-sqlite';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
-    dbPromise = Promise.resolve(SQLite.openDatabase('app.db')) as unknown as Promise<SQLite.SQLiteDatabase>;
+    dbPromise = SQLite.openDatabaseAsync('app.db');
   }
-  const db = await dbPromise;
-  // Foreign keys pragma not supported via runAsync path; ignore for classic API.
-  return db;
+  return dbPromise;
 }
 
 export async function initializeDatabase() {
   const db = await getDb();
-  const queries = `
+  await db.execAsync(`
+    PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,
       value TEXT
@@ -38,10 +37,10 @@ export async function initializeDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       place TEXT,
-      start_date TEXT NOT NULL, -- YYYY-MM-DD
-      end_date TEXT NOT NULL,   -- YYYY-MM-DD
-      start_time TEXT NOT NULL, -- HH:mm
-      end_time TEXT NOT NULL,   -- HH:mm
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
       category_id INTEGER NOT NULL,
       description TEXT,
       created_by TEXT NOT NULL,
@@ -60,15 +59,8 @@ export async function initializeDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_date, start_time);
-  `;
+  `);
 
-  await new Promise<void>((resolve, reject) => {
-    db.transaction(tx => {
-      queries.split(';').map(q => q.trim()).filter(Boolean).forEach(q => tx.executeSql(q));
-    }, reject, resolve);
-  });
-
-  // Seed categories if empty
   const countRes = await getSingle<{ c: number }>(`SELECT COUNT(1) as c FROM categories`);
   if (!countRes || countRes.c === 0) {
     const base = ['Deportes', 'Artes y creatividad', 'Naturaleza', 'Festival'];
@@ -80,29 +72,17 @@ export async function initializeDatabase() {
 
 export async function run(sql: string, params: any[] = []) {
   const db = await getDb();
-  return new Promise<void>((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(sql, params, () => resolve());
-    }, reject);
-  });
+  await db.runAsync(sql, ...params);
 }
 
 export async function getAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
   const db = await getDb();
-  return new Promise<T[]>((resolve, reject) => {
-    db.readTransaction(tx => {
-      tx.executeSql(sql, params, (_t, res) => {
-        const out: T[] = [] as any;
-        for (let i = 0; i < res.rows.length; i++) out.push(res.rows.item(i));
-        resolve(out);
-      });
-    }, reject);
-  });
+  return db.getAllAsync<T>(sql, ...params);
 }
 
 export async function getSingle<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
-  const rows = await getAll<T & Record<string, any>>(sql, params);
-  return rows[0];
+  const db = await getDb();
+  return (await db.getFirstAsync<T>(sql, ...params)) ?? undefined;
 }
 
 // Session helpers persisted in meta
@@ -114,3 +94,4 @@ export async function getCurrentUserId(): Promise<string | undefined> {
   const row = await getSingle<{ value: string }>(`SELECT value FROM meta WHERE key='current_user_id'`);
   return row?.value;
 }
+

@@ -97,6 +97,7 @@ export default function AuthScreen() {
     GITHUB_DISCOVERY
   );
 
+  const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
   const [isXLoading, setIsXLoading] = React.useState(false);
   const [isGithubLoading, setIsGithubLoading] = React.useState(false);
   const [isLoginLoading, setIsLoginLoading] = React.useState(false);
@@ -156,36 +157,63 @@ export default function AuthScreen() {
   }, [loginForm.email]);
 
   React.useEffect(() => {
-    if (response?.type === 'success') {
-      const { id_token } = response.params;
-      if (!id_token) return;
-      const userInfo = parseJwt(id_token) as any;
-      const userId: string = typeof userInfo?.sub === 'string' && userInfo.sub.length ? userInfo.sub : userInfo?.email || '';
+    if (!response) {
+      return;
+    }
 
-      if (!userId) {
-        Alert.alert('Autenticación con Google', 'No pudimos obtener tu identificador. Intenta nuevamente.');
-        return;
-      }
+    if (response.type === 'error') {
+      Alert.alert('Autenticación con Google', 'La autenticación fue cancelada o falló. Intenta nuevamente.');
+      return;
+    }
 
-      const profileEmail = typeof userInfo?.email === 'string' && userInfo.email.length ? userInfo.email : `${userId}@googleuser.local`;
-      const profileName = typeof userInfo?.name === 'string' ? userInfo.name : '';
-      const profilePicture = typeof userInfo?.picture === 'string' ? userInfo.picture : '';
+    if (response.type === 'success') {
+      setIsGoogleLoading(true);
+      (async () => {
+        const { id_token } = response.params;
+        if (!id_token) {
+          setIsGoogleLoading(false);
+          Alert.alert('Autenticación con Google', 'No recibimos el token de Google. Intenta de nuevo.');
+          return;
+        }
+        const userInfo = parseJwt(id_token) as Record<string, unknown>;
+        const userId = typeof userInfo?.sub === 'string' && userInfo.sub.length ? (userInfo.sub as string) : (userInfo?.email as string) || '';
 
-      router.replace({
-        pathname: '/(tabs)/home',
-        params: {
-          email: profileEmail,
-          name: profileName,
-          picture: profilePicture,
-        },
-      });
+        if (!userId) {
+          Alert.alert('Autenticación con Google', 'No pudimos obtener tu identificador. Intenta nuevamente.');
+          setIsGoogleLoading(false);
+          return;
+        }
 
-      persistUserSession({
-        id: userId,
-        name: profileName,
-        email: profileEmail,
-        photoUrl: profilePicture,
-      });
+        const profileEmail = typeof userInfo?.email === 'string' && userInfo.email.length ? (userInfo.email as string) : `${userId}@googleuser.local`;
+        const profileName = typeof userInfo?.name === 'string' ? (userInfo.name as string) : '';
+        const profilePicture = typeof userInfo?.picture === 'string' ? (userInfo.picture as string) : '';
+
+        router.replace({
+          pathname: '/(tabs)/home',
+          params: {
+            email: profileEmail,
+            name: profileName,
+            picture: profilePicture,
+          },
+        });
+
+        try {
+          await persistUserSession(
+            {
+              id: userId,
+              name: profileName,
+              email: profileEmail,
+              photoUrl: profilePicture,
+            },
+            { navigate: false }
+          );
+        } catch (error) {
+          console.error('Error persisting Google session', error);
+          Alert.alert('Autenticación con Google', 'No se pudo completar tu inicio de sesión. Intenta nuevamente.');
+        } finally {
+          setIsGoogleLoading(false);
+        }
+      })();
     }
   }, [response, persistUserSession]);
 
@@ -356,8 +384,17 @@ export default function AuthScreen() {
   };
   const renderSocialButtons = () => (
     <View style={styles.socialRow}>
-      <TouchableOpacity style={styles.socialIconButton} onPress={() => promptAsync(NATIVE_PROMPT_OPTIONS)}>
-        <FontAwesome5 name="google" size={22} color="#e24334" />
+      <TouchableOpacity
+        style={[styles.socialIconButton, (isGoogleLoading) && styles.buttonDisabled]}
+        onPress={() => promptAsync(NATIVE_PROMPT_OPTIONS)}
+        disabled={isGoogleLoading}
+        activeOpacity={0.85}
+      >
+        {isGoogleLoading ? (
+          <ActivityIndicator size="small" color="#e24334" />
+        ) : (
+          <FontAwesome5 name="google" size={22} color="#e24334" />
+        )}
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.socialIconButton, (!isXConfigured || isXLoading || !xRequest) && styles.buttonDisabled]}
