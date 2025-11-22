@@ -75,6 +75,7 @@ export default function AuthScreen() {
     redirectUri,
   });
 
+
   const [xRequest, xResponse, promptXAsync] = useAuthRequest(
     {
       clientId: xClientId || 'missing-x-client-id',
@@ -118,6 +119,7 @@ export default function AuthScreen() {
     if (!trimmedEmail || !trimmedPassword) {
       Alert.alert('Inicio de sesión', 'Ingresa correo y contraseña para continuar.');
       return;
+
     }
 
     setIsLoginLoading(true);
@@ -382,6 +384,7 @@ export default function AuthScreen() {
       return {};
     }
   };
+
   const renderSocialButtons = () => (
     <View style={styles.socialRow}>
       <TouchableOpacity
@@ -437,6 +440,7 @@ export default function AuthScreen() {
         ) : (
           <FontAwesome5 name="github" size={22} color="#111" />
         )}
+
       </TouchableOpacity>
     </View>
   );
