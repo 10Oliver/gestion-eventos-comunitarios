@@ -22,7 +22,9 @@ import {
 } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
-import { normalizeFirebaseError, registerWithEmail, resetPassword, signInWithEmail } from '../lib/auth/email';
+import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { normalizeFirebaseError, resetPassword, signInWithEmail } from '../lib/auth/email';
+import { persistUserSession } from '../lib/auth/session';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -45,7 +47,7 @@ type NativePromptOptions = AuthRequestPromptOptions & { useProxy?: boolean };
 const NATIVE_PROMPT_OPTIONS: NativePromptOptions = { useProxy: false };
 const GITHUB_PROMPT_OPTIONS: NativePromptOptions = { useProxy: true };
 
-export default function LoginScreen() {
+export default function AuthScreen() {
   const redirectUri = makeRedirectUri({
     scheme: 'com.gestioneventoscomunitarios.app',
     path: 'oauth2redirect/google',
@@ -97,10 +99,9 @@ export default function LoginScreen() {
 
   const [isXLoading, setIsXLoading] = React.useState(false);
   const [isGithubLoading, setIsGithubLoading] = React.useState(false);
-  const [isEmailLoading, setIsEmailLoading] = React.useState(false);
-  const [authMode, setAuthMode] = React.useState<'login' | 'register'>('login');
-  const [emailForm, setEmailForm] = React.useState({ name: '', email: '', password: '' });
-  const [emailError, setEmailError] = React.useState<string | null>(null);
+  const [isLoginLoading, setIsLoginLoading] = React.useState(false);
+  const [loginForm, setLoginForm] = React.useState({ email: '', password: '' });
+  const [loginError, setLoginError] = React.useState<string | null>(null);
   const buildGithubHeaders = React.useCallback(
     (token: string) => ({
       Authorization: `Bearer ${token}`,
@@ -109,93 +110,37 @@ export default function LoginScreen() {
     }),
     []
   );
-  const persistUserSession = React.useCallback(async ({
-    id,
-    name,
-    email,
-    photoUrl,
-  }: {
-    id: string;
-    name?: string;
-    email?: string;
-    photoUrl?: string;
-  }) => {
-    if (!id) {
-      Alert.alert('Autenticación', 'No se pudo obtener el identificador del usuario.');
-      return;
-    }
-
-    try {
-      const { upsertUser } = await import('../lib/models/users');
-      const { setCurrentUserId } = await import('../lib/db');
-
-      await upsertUser({
-        id,
-        name,
-        email,
-        photo_url: photoUrl,
-      });
-      await setCurrentUserId(id);
-
-      router.replace({
-        pathname: '/(tabs)/home',
-        params: {
-          email: email || '',
-          name: name || '',
-          picture: photoUrl || '',
-        },
-      });
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Autenticación', 'No se pudo guardar la sesión local. Intenta de nuevo.');
-    }
-  }, []);
-
-  const handleEmailAuth = React.useCallback(async () => {
-    const trimmedEmail = emailForm.email.trim();
-    const trimmedPassword = emailForm.password.trim();
-    const trimmedName = emailForm.name.trim();
-    const isRegister = authMode === 'register';
+  const handleLogin = React.useCallback(async () => {
+    const trimmedEmail = loginForm.email.trim();
+    const trimmedPassword = loginForm.password.trim();
 
     if (!trimmedEmail || !trimmedPassword) {
-      Alert.alert('Autenticación por correo', 'Ingresa correo y contraseña para continuar.');
+      Alert.alert('Inicio de sesión', 'Ingresa correo y contraseña para continuar.');
       return;
     }
 
-    if (isRegister && !trimmedName) {
-      Alert.alert('Crear cuenta', 'Agrega tu nombre para personalizar la cuenta.');
-      return;
-    }
-
-    setIsEmailLoading(true);
-    setEmailError(null);
+    setIsLoginLoading(true);
+    setLoginError(null);
     try {
-      const user = isRegister
-        ? await registerWithEmail({
-            email: trimmedEmail,
-            password: trimmedPassword,
-            displayName: trimmedName,
-          })
-        : await signInWithEmail({ email: trimmedEmail, password: trimmedPassword });
-
+      const user = await signInWithEmail({ email: trimmedEmail, password: trimmedPassword });
       await persistUserSession({
         id: user.uid,
-        name: user.displayName || trimmedName,
+        name: user.displayName || '',
         email: user.email || trimmedEmail,
         photoUrl: user.photoURL || undefined,
       });
-      setEmailForm((current) => ({ ...current, password: '' }));
+      setLoginForm((current) => ({ ...current, password: '' }));
     } catch (error) {
       const message = normalizeFirebaseError(error);
-      setEmailError(message);
-      Alert.alert('Autenticación por correo', message);
+      setLoginError(message);
+      Alert.alert('Inicio de sesión', message);
     } finally {
-      setIsEmailLoading(false);
+      setIsLoginLoading(false);
     }
-  }, [authMode, emailForm, persistUserSession]);
+  }, [loginForm, persistUserSession]);
 
   const handleResetPassword = React.useCallback(async () => {
-    const trimmedEmail = emailForm.email.trim();
+    const trimmedEmail = loginForm.email.trim();
     if (!trimmedEmail) {
       Alert.alert('Recuperar contraseña', 'Ingresa tu correo para enviarte un enlace.');
       return;
@@ -208,19 +153,38 @@ export default function LoginScreen() {
       const message = normalizeFirebaseError(error);
       Alert.alert('Recuperar contraseña', message);
     }
-  }, [emailForm.email]);
+  }, [loginForm.email]);
 
   React.useEffect(() => {
     if (response?.type === 'success') {
       const { id_token } = response.params;
       if (!id_token) return;
       const userInfo = parseJwt(id_token) as any;
-      const userId = userInfo.sub || userInfo.email || '';
+      const userId: string = typeof userInfo?.sub === 'string' && userInfo.sub.length ? userInfo.sub : userInfo?.email || '';
+
+      if (!userId) {
+        Alert.alert('Autenticación con Google', 'No pudimos obtener tu identificador. Intenta nuevamente.');
+        return;
+      }
+
+      const profileEmail = typeof userInfo?.email === 'string' && userInfo.email.length ? userInfo.email : `${userId}@googleuser.local`;
+      const profileName = typeof userInfo?.name === 'string' ? userInfo.name : '';
+      const profilePicture = typeof userInfo?.picture === 'string' ? userInfo.picture : '';
+
+      router.replace({
+        pathname: '/(tabs)/home',
+        params: {
+          email: profileEmail,
+          name: profileName,
+          picture: profilePicture,
+        },
+      });
+
       persistUserSession({
         id: userId,
-        name: userInfo.name,
-        email: userInfo.email,
-        photoUrl: userInfo.picture,
+        name: profileName,
+        email: profileEmail,
+        photoUrl: profilePicture,
       });
     }
   }, [response, persistUserSession]);
@@ -390,7 +354,56 @@ export default function LoginScreen() {
       return {};
     }
   };
-  const isRegisterMode = authMode === 'register';
+  const renderSocialButtons = () => (
+    <View style={styles.socialRow}>
+      <TouchableOpacity style={styles.socialIconButton} onPress={() => promptAsync(NATIVE_PROMPT_OPTIONS)}>
+        <FontAwesome5 name="google" size={22} color="#e24334" />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.socialIconButton, (!isXConfigured || isXLoading || !xRequest) && styles.buttonDisabled]}
+        onPress={() => {
+          if (!isXConfigured) {
+            Alert.alert(
+              'Configuración requerida',
+              'Define EXPO_PUBLIC_X_CLIENT_ID en tu .env antes de intentar iniciar sesión con X.'
+            );
+            return;
+          }
+          promptXAsync?.(NATIVE_PROMPT_OPTIONS).catch(console.error);
+        }}
+        disabled={!isXConfigured || !xRequest || isXLoading}
+        activeOpacity={0.85}
+      >
+        {isXLoading ? (
+          <ActivityIndicator size="small" color="#111" />
+        ) : (
+          <MaterialCommunityIcons name="alpha-x" size={24} color="#111" />
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.socialIconButton, (!isGithubConfigured || !githubRequest || isGithubLoading) && styles.buttonDisabled]}
+        onPress={() => {
+          if (!isGithubConfigured) {
+            Alert.alert(
+              'Configuración requerida',
+              'Define EXPO_PUBLIC_GITHUB_CLIENT_ID y EXPO_PUBLIC_GITHUB_CLIENT_SECRET antes de iniciar sesión con GitHub.'
+            );
+            return;
+          }
+          promptGithubAsync?.(GITHUB_PROMPT_OPTIONS).catch(console.error);
+        }}
+        disabled={!isGithubConfigured || !githubRequest || isGithubLoading}
+        activeOpacity={0.85}
+      >
+        {isGithubLoading ? (
+          <ActivityIndicator size="small" color="#111" />
+        ) : (
+          <FontAwesome5 name="github" size={22} color="#111" />
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+  const goToRegister = React.useCallback(() => router.push('/register'), []);
 
   return (
     <KeyboardAvoidingView
@@ -398,130 +411,52 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.container}>
-          <Text style={styles.title}>Gestiona tus eventos</Text>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Acceso con correo</Text>
-            <View style={styles.modeToggle}>
-              <TouchableOpacity
-                style={[styles.modeButton, !isRegisterMode && styles.modeButtonActive]}
-                onPress={() => {
-                  setAuthMode('login');
-                  setEmailError(null);
-                }}
-              >
-                <Text style={[styles.modeButtonText, !isRegisterMode && styles.modeButtonTextActive]}>Iniciar sesión</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modeButton, isRegisterMode && styles.modeButtonActive]}
-                onPress={() => {
-                  setAuthMode('register');
-                  setEmailError(null);
-                }}
-              >
-                <Text style={[styles.modeButtonText, isRegisterMode && styles.modeButtonTextActive]}>Crear cuenta</Text>
-              </TouchableOpacity>
-            </View>
-            {isRegisterMode && (
-              <TextInput
-                style={styles.input}
-                placeholder="Nombre completo"
-                value={emailForm.name}
-                onChangeText={(text) => setEmailForm((current) => ({ ...current, name: text }))}
-                autoCapitalize="words"
-                placeholderTextColor="#9aa1b2"
-                returnKeyType="next"
-              />
-            )}
-            <TextInput
-              style={styles.input}
-              placeholder="Correo electrónico"
-              value={emailForm.email}
-              onChangeText={(text) => setEmailForm((current) => ({ ...current, email: text }))}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              placeholderTextColor="#9aa1b2"
-              returnKeyType="next"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Contraseña"
-              value={emailForm.password}
-              onChangeText={(text) => setEmailForm((current) => ({ ...current, password: text }))}
-              secureTextEntry
-              placeholderTextColor="#9aa1b2"
-              returnKeyType="done"
-            />
-            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-            <TouchableOpacity
-              style={[styles.primaryButton, isEmailLoading && styles.buttonDisabled]}
-              onPress={handleEmailAuth}
-              disabled={isEmailLoading}
-            >
-              {isEmailLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>
-                  {isRegisterMode ? 'Crear cuenta' : 'Iniciar sesión'}
-                </Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleResetPassword} style={styles.linkButton}>
-              <Text style={styles.linkText}>¿Olvidaste tu contraseña?</Text>
-            </TouchableOpacity>
+  <View style={styles.loginCard}>
+          <Text style={styles.loginTitle}>Inicio de sesión</Text>
+          <Text style={styles.loginSubtitle}>¡Un placer tenerte de vuelta!</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Correo electrónico"
+            value={loginForm.email}
+            onChangeText={(text) => setLoginForm((current) => ({ ...current, email: text }))}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            placeholderTextColor="#9aa1b2"
+            returnKeyType="next"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Contraseña"
+            value={loginForm.password}
+            onChangeText={(text) => setLoginForm((current) => ({ ...current, password: text }))}
+            secureTextEntry
+            placeholderTextColor="#9aa1b2"
+            returnKeyType="done"
+          />
+          {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
+          <TouchableOpacity
+            style={[styles.primaryButton, isLoginLoading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={isLoginLoading}
+          >
+            {isLoginLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Iniciar sesión</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleResetPassword} style={styles.linkButton}>
+            <Text style={styles.linkText}>¿Olvidaste tu contraseña?</Text>
+          </TouchableOpacity>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>ó</Text>
+            <View style={styles.dividerLine} />
           </View>
-
-          <View style={styles.socialSection}>
-            <Text style={styles.sectionLabel}>O continúa con</Text>
-            <TouchableOpacity
-              style={styles.googleButton}
-              onPress={() => promptAsync(NATIVE_PROMPT_OPTIONS)}
-            >
-              <Text style={styles.googleButtonText}>Continuar con Google</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.xButton, (!isXConfigured || isXLoading || !xRequest) && styles.buttonDisabled]}
-              onPress={() => {
-                if (!isXConfigured) {
-                  Alert.alert('Configuración requerida', 'Define EXPO_PUBLIC_X_CLIENT_ID en tu .env antes de intentar iniciar sesión con X.');
-                  return;
-                }
-                promptXAsync?.(NATIVE_PROMPT_OPTIONS).catch(console.error);
-              }}
-              disabled={!isXConfigured || !xRequest || isXLoading}
-              activeOpacity={0.85}
-            >
-              {isXLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.xButtonText}>Continuar con X</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.githubButton, (!isGithubConfigured || !githubRequest || isGithubLoading) && styles.buttonDisabled]}
-              onPress={() => {
-                if (!isGithubConfigured) {
-                  Alert.alert(
-                    'Configuración requerida',
-                    'Define EXPO_PUBLIC_GITHUB_CLIENT_ID y EXPO_PUBLIC_GITHUB_CLIENT_SECRET antes de iniciar sesión con GitHub.'
-                  );
-                  return;
-                }
-                promptGithubAsync?.(GITHUB_PROMPT_OPTIONS).catch(console.error);
-              }}
-              disabled={!isGithubConfigured || !githubRequest || isGithubLoading}
-              activeOpacity={0.85}
-            >
-              {isGithubLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.githubButtonText}>Continuar con GitHub</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.sectionLabel}>Continuar con</Text>
+          {renderSocialButtons()}
+          <TouchableOpacity onPress={goToRegister} style={styles.inlineLink}>
+            <Text style={styles.inlineText}>
+              ¿No tienes cuenta? <Text style={styles.inlineHighlight}>Crear cuenta</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -531,7 +466,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#fff',
   },
   scroll: {
     flexGrow: 1,
@@ -539,140 +474,113 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  container: {
+  loginCard: {
     width: '100%',
     maxWidth: 420,
-    rowGap: 24,
+    paddingHorizontal: 12,
+    paddingVertical: 24,
+    rowGap: 14,
   },
-  title: {
-    fontSize: 28,
+  loginTitle: {
+    fontSize: 32,
     fontWeight: '700',
+    color: '#4caf50',
     textAlign: 'center',
-    color: '#111827',
   },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-    rowGap: 12,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  modeToggle: {
-    flexDirection: 'row',
-    backgroundColor: '#f1f5f9',
-    borderRadius: 12,
-    padding: 4,
-    columnGap: 4,
-  },
-  modeButton: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  modeButtonActive: {
-    backgroundColor: '#fff',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  modeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  modeButtonTextActive: {
-    color: '#111827',
+  loginSubtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#374151',
+    marginBottom: 6,
   },
   input: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingHorizontal: 14,
+    borderColor: '#a3e635',
+    borderRadius: 12,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 16,
     color: '#0f172a',
-    backgroundColor: '#fff',
+    backgroundColor: '#f7fee7',
   },
   errorText: {
     color: '#dc2626',
     fontSize: 13,
   },
   primaryButton: {
-    backgroundColor: '#2563eb',
-    borderRadius: 10,
-    paddingVertical: 14,
+    backgroundColor: '#7cc72d',
+    borderRadius: 12,
+    paddingVertical: 15,
     alignItems: 'center',
   },
   primaryButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
   },
   linkButton: {
     alignItems: 'center',
   },
   linkText: {
-    color: '#2563eb',
+    color: '#4caf50',
     fontWeight: '600',
-  },
-  socialSection: {
-    rowGap: 12,
-    width: '100%',
   },
   sectionLabel: {
     textAlign: 'center',
     color: '#4b5563',
     fontWeight: '600',
+    marginBottom: 6,
   },
-  googleButton: {
-    backgroundColor: '#4285F4',
-    padding: 15,
-    borderRadius: 10,
+  socialRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    columnGap: 18,
+    marginBottom: 8,
+  },
+  socialIconButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
     alignItems: 'center',
-  },
-  googleButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  xButton: {
-    backgroundColor: '#000',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  xButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   buttonDisabled: {
     opacity: 0.4,
   },
-  githubButton: {
-    backgroundColor: '#24292e',
-    padding: 15,
-    borderRadius: 10,
+  dividerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    columnGap: 10,
+    marginVertical: 8,
   },
-  githubButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#d1d5db',
+  },
+  dividerText: {
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  inlineLink: {
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  inlineText: {
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  inlineHighlight: {
+    color: '#4caf50',
+    fontWeight: '700',
   },
 });
