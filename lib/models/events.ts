@@ -129,3 +129,14 @@ export async function getEventsUserWillAttend(userId: string) {
     [userId]
   );
 }
+
+export async function getAttendeesCount(eventId: number) {
+  const row = await getSingle<{ total: number }>(
+    `SELECT COUNT(1) as total
+     FROM event_attendees
+     WHERE event_id = ?`,
+    [eventId]
+  );
+
+  return row?.total ?? 0;
+}
