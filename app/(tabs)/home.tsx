@@ -142,6 +142,16 @@ export default function Home() {
           <Ionicons name="add" size={32} color="#fff" />
         </TouchableOpacity>
 
+        {/* ACERCA DE (Creative Commons) */}
+        <View style={styles.aboutSection}>
+          <TouchableOpacity onPress={() => router.push("/about")}>
+            <Text style={styles.aboutText}>
+              Acerca de • Licencia Creative Commons
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+
       </ScrollView>
     </View>
   );
@@ -304,6 +314,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
+  },
+  aboutSection: {
+    marginTop: 20,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+
+  aboutText: {
+    fontSize: 12,
+    color: "#888",
+    textDecorationLine: "underline",
   },
 
 });
