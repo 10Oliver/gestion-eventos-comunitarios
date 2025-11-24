@@ -107,3 +107,21 @@ cd ..
 ``` bash
 adb uninstall com.gestioneventoscomunitarios.app
 ```
+
+## 📄 Licencia
+
+Este proyecto está distribuido bajo la licencia Creative Commons Atribución – No Comercial 4.0 Internacional (CC BY-NC 4.0).
+
+Esto significa que:
+
+✔️ Puedes copiar y redistribuir el material en cualquier medio o formato
+
+✔️ Puedes remezclar, transformar y crear obras derivadas
+
+❗ No puedes usarlo con fines comerciales
+
+✔️ Debes dar crédito apropiado, incluir un enlace a la licencia y especificar si realizaste cambios
+
+🔗 Ver licencia completa:
+https://creativecommons.org/licenses/by-nc/4.0/
+##
